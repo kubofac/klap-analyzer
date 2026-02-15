@@ -1,0 +1,23 @@
+{
+  "name": "KLAPAnalyzer",
+  "short_name": "KLAPAnalyzer",
+  "description": "GPS走行解析",
+  "start_url": "/analyzer.html",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#000000",
+  "theme_color": "#E4002B",
+  "scope": "/",
+  "icons": [
+    {
+      "src": "/192p.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/512p.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
