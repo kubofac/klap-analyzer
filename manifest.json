@@ -2,7 +2,7 @@
   "name": "KLAPAnalyzer",
   "short_name": "KLAPAnalyzer",
   "description": "GPS走行解析",
-  "start_url": "/analyzer.html",
+  "start_url": "/index.html",
   "display": "fullscreen",
   "orientation": "landscape",
   "background_color": "#000000",
@@ -21,3 +21,4 @@
     }
   ]
 }
+
