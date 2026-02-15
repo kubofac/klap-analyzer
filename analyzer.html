@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>KLAP ANALYZER V3.5 - Auto Speed Scaling</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        body { background: #0a0a0a; color: #eee; font-family: sans-serif; margin: 0; display: flex; flex-direction: column; height: 100vh; width: 100vw; overflow: hidden; }
+        #main-container { display: flex; flex: 1; width: 100%; min-height: 0; }
+        #map { width: 40%; height: 100%; border-right: 1px solid #E4002B; position: relative; }
+        #chart-area { width: 60%; height: 100%; background: #111; display: flex; flex-direction: column; touch-action: none; }
+        .chart-box { flex: 1; padding: 5px; box-sizing: border-box; min-height: 0; }
+        #delta-area { height: 80px; border-top: 1px solid #444; background: #000; }
+        
+        #controls { 
+            height: 95px; display: flex; align-items: center; 
+            background: #1a1a1a; padding: 0 10px; gap: 10px; 
+            overflow-x: auto; -webkit-overflow-scrolling: touch;
+            border-top: 1px solid #333;
+        }
+        .lap-btn { 
+            min-width: 95px; height: 75px; background: #2a2a2a; color: #ccc; 
+            border: 1px solid #555; border-radius: 8px; flex-shrink: 0; 
+            font-size: 13px; font-weight: bold; position: relative;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+        }
+        .lap-btn.primary { background: #E4002B; color: white; border: 3px solid #ff4d4d; box-shadow: 0 0 10px #E4002B; z-index: 2; }
+        .lap-btn.secondary { background: #3388ff; color: white; border: 3px solid #77b5ff; box-shadow: 0 0 10px #3388ff; z-index: 2; }
+        
+        .badge { font-size: 9px; margin-bottom: 3px; border-radius: 3px; padding: 1px 5px; font-weight: bold; }
+        .best-badge { background: #00ff00; color: #000; }
+        .speed-badge { background: #ffa500; color: #000; }
+
+        .file-box { min-width: 140px; font-size: 11px; border-right: 1px solid #444; padding-right: 10px; }
+        button.reset-btn { margin-top: 6px; background: #444; color: #fff; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; }
+
+        #offset-panel {
+            position: absolute; bottom: 20px; right: 20px; z-index: 1000;
+            background: rgba(0,0,0,0.8); padding: 10px; border-radius: 8px;
+            display: grid; grid-template-areas: ". up ." "left . right" ". down ."; gap: 5px;
+            border: 1px solid #E4002B;
+        }
+        .off-btn { width: 40px; height: 40px; background: #333; color: white; border: 1px solid #666; border-radius: 4px; font-weight: bold; cursor: pointer; }
+        .off-btn:active { background: #E4002B; }
+        #off-up { grid-area: up; } #off-down { grid-area: down; } #off-left { grid-area: left; } #off-right { grid-area: right; }
+        .off-label { position: absolute; top: -20px; left: 0; width: 100%; text-align: center; font-size: 10px; color: #E4002B; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div id="main-container">
+    <div id="map">
+        <div id="offset-panel">
+            <div class="off-label">LINE ADJUST</div>
+            <button id="off-up" class="off-btn">↑</button>
+            <button id="off-down" class="off-btn">↓</button>
+            <button id="off-left" class="off-btn">←</button>
+            <button id="off-right" class="off-btn">→</button>
+        </div>
+    </div>
+    <div id="chart-area">
+        <div class="chart-box"><canvas id="telemetryChart"></canvas></div>
+        <div id="delta-area" class="chart-box"><canvas id="deltaChart"></canvas></div>
+    </div>
+</div>
+
+<div id="controls">
+    <div class="file-box">
+        <input type="file" id="fileInput" accept=".gpx" style="width:120px;"><br>
+        <button class="reset-btn" onclick="location.reload()">RESET / RELOAD</button>
+    </div>
+    <div id="lap-selector" style="display:flex; gap:10px;"></div>
+</div>
+
+<script>
+'use strict';
+let map, marker1, marker2, poly1, poly2;
+let telChart = null, deltaChart = null;
+let lapDataStore = [];
+let primaryIdx = -1, secondaryIdx = -1;
+let sessionMaxSpeed = 0; // ファイル内の最高速を記憶
+let latOffset = 0, lonOffset = 0;
+const OFFSET_UNIT = 0.000005; 
+
+// 初期設定
+map = L.map('map', { zoomControl: false }).setView([35.68, 139.76], 15);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+marker1 = L.circleMarker([0, 0], { color: '#000', fillColor: '#fff', radius: 8, fillOpacity: 1, weight: 3 }).addTo(map);
+marker2 = L.circleMarker([0, 0], { color: '#000', fillColor: '#3388ff', radius: 6, fillOpacity: 1, weight: 2 }).addTo(map);
+
+// オフセットボタン
+document.getElementById('off-up').onclick = () => { latOffset += OFFSET_UNIT; displayData(); };
+document.getElementById('off-down').onclick = () => { latOffset -= OFFSET_UNIT; displayData(); };
+document.getElementById('off-left').onclick = () => { lonOffset -= OFFSET_UNIT; displayData(); };
+document.getElementById('off-right').onclick = () => { lonOffset += OFFSET_UNIT; displayData(); };
+
+document.getElementById('fileInput').onchange = e => {
+    const reader = new FileReader();
+    reader.onload = evt => parseGPX(new DOMParser().parseFromString(evt.target.result, "text/xml"));
+    reader.readAsText(e.target.files[0]);
+};
+
+// 速度に応じた色計算（セッション最高速を基準にスケール）
+function getSpeedColor(speed) {
+    const maxReference = sessionMaxSpeed || 100;
+    const ratio = Math.min(Math.max(speed / maxReference, 0), 1);
+    const hue = (1 - ratio) * 240; // 240(Blue) to 0(Red)
+    return `hsl(${hue}, 100%, 50%)`;
+}
+
+// ヒートマップライン描画
+function drawSpeedLine(coords, speeds, isSecondary) {
+    const group = L.featureGroup();
+    for (let i = 0; i < coords.length - 1; i++) {
+        const color = getSpeedColor(speeds[i]);
+        L.polyline([coords[i], coords[i+1]], {
+            color: color,
+            weight: isSecondary ? 3 : 6,
+            opacity: isSecondary ? 0.3 : 1,
+            dashArray: isSecondary ? '5, 8' : null
+        }).addTo(group);
+    }
+    return group;
+}
+
+function parseGPX(xml) {
+    const trks = xml.getElementsByTagName('trk');
+    const selector = document.getElementById('lap-selector');
+    selector.innerHTML = ''; lapDataStore = [];
+    let lapTimes = [];
+    sessionMaxSpeed = 0; // 最高速リセット
+    let maxSpdIdx = -1;
+
+    for (let i = 0; i < trks.length; i++) {
+        const pts = trks[i].getElementsByTagName('trkpt');
+        if (pts.length < 2) continue;
+        let speeds = [], rpms = [], coords = [], times = [], lapMax = 0;
+        const startT = new Date(pts[0].getElementsByTagName('time')[0].textContent);
+        
+        for (let j = 0; j < pts.length; j++) {
+            const s = Math.round(parseFloat(pts[j].getElementsByTagName('speed')[0]?.textContent || 0) * 3.6);
+            if (s > lapMax) lapMax = s;
+            speeds.push(s);
+            const rpm = parseInt(pts[j].getElementsByTagName('gpxtpx:hr')[0]?.textContent || pts[j].getElementsByTagName('hr')[0]?.textContent || 0);
+            rpms.push(rpm);
+            coords.push([parseFloat(pts[j].getAttribute('lat')), parseFloat(pts[j].getAttribute('lon'))]);
+            times.push((new Date(pts[j].getElementsByTagName('time')[0].textContent) - startT) / 1000);
+        }
+
+        if (lapMax > sessionMaxSpeed) { sessionMaxSpeed = lapMax; maxSpdIdx = i; }
+        lapTimes.push(times[times.length-1]);
+        lapDataStore.push({ speeds, rpms, coords, times, duration: times[times.length-1], maxSpd: lapMax });
+    }
+
+    const minTime = Math.min(...lapTimes);
+    const bestIdx = lapTimes.indexOf(minTime);
+
+    lapDataStore.forEach((lap, i) => {
+        const btn = document.createElement('button');
+        btn.className = 'lap-btn';
+        if (i === bestIdx) btn.id = "best-lap-btn";
+        btn.innerHTML = `${(i === bestIdx ? '<span class="badge best-badge">★BEST</span>' : '')}${(i === maxSpdIdx ? '<span class="badge speed-badge">MAX SPD</span>' : '')}L${i+1}<br>${lap.duration.toFixed(3)}`;
+        btn.onclick = () => {
+            if (primaryIdx === -1 || (primaryIdx !== -1 && secondaryIdx !== -1)) { primaryIdx = i; secondaryIdx = -1; }
+            else { secondaryIdx = i; }
+            updateUI();
+        };
+        selector.appendChild(btn);
+    });
+    if (lapDataStore.length > 0) { primaryIdx = bestIdx; updateUI(); }
+}
+
+function updateUI() {
+    const btns = document.querySelectorAll('.lap-btn');
+    btns.forEach((b, i) => { b.className = 'lap-btn' + (i === primaryIdx ? ' primary' : (i === secondaryIdx ? ' secondary' : '')); });
+    displayData();
+}
+
+function displayData() {
+    if (primaryIdx === -1) return;
+    const p = lapDataStore[primaryIdx], s = secondaryIdx >= 0 ? lapDataStore[secondaryIdx] : null;
+    const getCorr = (coords) => coords.map(c => [c[0] + latOffset, c[1] + lonOffset]);
+    const pCoords = getCorr(p.coords), sCoords = s ? getCorr(s.coords) : [];
+
+    // 地図描画
+    if (poly1) map.removeLayer(poly1); if (poly2) map.removeLayer(poly2);
+    poly1 = drawSpeedLine(pCoords, p.speeds, false).addTo(map);
+    if (s) poly2 = drawSpeedLine(sCoords, s.speeds, true).addTo(map);
+    if (!window.hasZoomed) { map.fitBounds(poly1.getBounds(), { padding: [20, 20] }); window.hasZoomed = true; }
+
+    // チャート描画
+    if (telChart) telChart.destroy(); if (deltaChart) deltaChart.destroy();
+    const commonLabels = p.speeds.map((_, i) => i);
+    
+    telChart = new Chart(document.getElementById('telemetryChart').getContext('2d'), {
+        type: 'line',
+        data: {
+            labels: commonLabels,
+            datasets: [
+                { label: 'SPD', data: p.speeds, borderColor: '#E4002B', yAxisID: 'y', pointRadius: 0, borderWidth: 3 },
+                { label: 'RPM', data: p.rpms, borderColor: '#ff00ff', yAxisID: 'yRPM', pointRadius: 0, borderWidth: 1, borderDash: [2,2] },
+                s ? { label: 'SPD Comp', data: s.speeds, borderColor: '#3388ff', yAxisID: 'y', pointRadius: 0, borderDash: [5,5], borderWidth: 2 } : null
+            ].filter(Boolean)
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            onHover: (e, el) => {
+                if (el.length > 0) {
+                    const idx = el[0].index;
+                    marker1.setLatLng(pCoords[idx]);
+                    if (s) marker2.setLatLng(sCoords[Math.min(idx, sCoords.length-1)]);
+                }
+            },
+            scales: { 
+                x: { display: false }, 
+                y: { min: 0, ticks: { color: '#ffa500' }, grid: { color: '#333' } },
+                yRPM: { position: 'right', min: 0, ticks: { color: '#ff00ff' }, grid: { drawOnChartArea: false } }
+            },
+            plugins: { legend: { display: false } }
+        }
+    });
+
+    const deltaData = s ? p.speeds.map((_, i) => s.times[Math.min(i, s.times.length-1)] - p.times[i]) : [];
+    deltaChart = new Chart(document.getElementById('deltaChart').getContext('2d'), {
+        type: 'line',
+        data: { labels: commonLabels, datasets: [{ data: deltaData, borderColor: '#00ff00', fill: true, backgroundColor: 'rgba(0,255,0,0.1)', pointRadius: 0, borderWidth: 2 }] },
+        options: { 
+            responsive: true, maintainAspectRatio: false,
+            scales: { x: { display: false }, y: { ticks: { color: '#00ff00' }, grid: { color: '#444' } } },
+            plugins: { legend: { display: false } }
+        }
+    });
+}
+</script>
+</body>
+</html>
