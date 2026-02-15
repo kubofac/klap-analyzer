@@ -1,7 +1,7 @@
 const CACHE_NAME = 'KLAP Analyzer';
 const urlsToCache = [
   '/',
-  '/analyzer.html',
+  '/index.html',
 
   '/manifest.json',
   '/service-worker.js',
@@ -54,5 +54,6 @@ self.addEventListener('activate', (event) => {
   );
 
 });
+
 
 
