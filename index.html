@@ -3,53 +3,59 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>KLAP ANALYZER V6.9.8</title>
-      <link rel="manifest" href="/manifest.json">  
+    <title>KLAP ANALYZER V6.9.9</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
         :root { --hrc-red: #ff4444; --hrc-blue: #33ccff; --bg-dark: #0a0a0a; }
-        body { background: var(--bg-dark); color: #eee; font-family: sans-serif; margin: 0; display: flex; flex-direction: column; height: 100dvh; overflow: hidden; }
-        #main-container { display: flex; flex: 1; min-height: 0; position: relative; }
+        /* 画面全体のスクロールを禁止 */
+        html, body { 
+            background: var(--bg-dark); color: #eee; font-family: sans-serif; 
+            margin: 0; padding: 0; height: 100dvh; width: 100vw;
+            overflow: hidden; position: fixed; touch-action: none;
+        }
+        #main-container { display: flex; flex: 1; height: calc(100dvh - 95px); position: relative; }
         #map { width: 45%; height: 100%; border-right: 1px solid var(--hrc-red); background: #222; }
         #chart-area { width: 55%; height: 100%; background: #111; display: flex; flex-direction: column; position: relative; }
-        .chart-box { flex: 1; padding: 5px; box-sizing: border-box; min-height: 0; }
+        .chart-box { flex: 1; padding: 5px; box-sizing: border-box; min-height: 0; touch-action: none; }
         #delta-area { height: 100px; border-top: 1px solid #444; background: #000; }
         
         /* ドラッグパネル */
-        .draggable-panel { position: absolute; z-index: 5000; background: rgba(0,0,0,0.9); border-radius: 10px; border: 2px solid #555; touch-action: none; overflow: hidden; }
-        #offset-panel { top: 10px; left: 10px; padding: 5px; display: grid; grid-template-areas: "hd hd hd" ". up ." "left . right" ". down ."; gap: 5px; width: fit-content; }
-        .panel-header { grid-area: hd; background: #444; color: white; font-size: 10px; padding: 8px; text-align: center; cursor: move; font-weight: bold; border-radius: 4px; }
-        .off-btn { width: 42px; height: 42px; background: #333; color: white; border: 1px solid #666; border-radius: 6px; font-size: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+        .draggable-panel { 
+            position: absolute; z-index: 5000; background: rgba(0,0,0,0.9); 
+            border-radius: 10px; border: 2px solid #555; overflow: hidden;
+            touch-action: none; /* ブラウザのスクロール干渉を防止 */
+        }
+        #offset-panel { top: 10px; left: 10px; padding: 5px; display: grid; grid-template-areas: "hd hd hd" ". up ." "left . right" ". down ."; gap: 5px; }
+        .panel-header { grid-area: hd; background: #444; color: white; font-size: 11px; padding: 12px; text-align: center; cursor: move; font-weight: bold; border-radius: 4px; }
+        .off-btn { width: 44px; height: 44px; background: #333; color: white; border: 1px solid #666; border-radius: 6px; font-size: 20px; display: flex; align-items: center; justify-content: center; }
 
-        /* ダッシュボード */
-        #data-dashboard { top: 10px; right: 10px; min-width: 170px; padding-bottom: 8px; }
-        #dash-content { padding: 8px; font-family: 'Courier New', monospace; font-size: 13px; pointer-events: none; }
+        /* データダッシュボード */
+        #data-dashboard { top: 10px; right: 10px; min-width: 150px; }
+        #dash-content { padding: 10px; font-family: 'Courier New', monospace; font-size: 13px; pointer-events: none; }
         .dash-l1 { color: var(--hrc-red); font-weight: bold; }
         .dash-l2 { color: var(--hrc-blue); font-weight: bold; }
         .dash-gap { color: #0f0; border-top: 1px solid #333; margin-top: 5px; padding-top: 3px; text-align: right; }
 
         /* コントロール */
-        #controls { height: 95px; display: flex; flex-direction: column; background: #1a1a1a; border-top: 1px solid #333; z-index: 100; padding: 5px 10px; box-sizing: border-box; }
+        #controls { height: 95px; background: #1a1a1a; border-top: 1px solid #333; padding: 5px 10px; box-sizing: border-box; display: flex; flex-direction: column; }
         .ctrl-row { display: flex; align-items: center; gap: 8px; flex: 1; overflow: hidden; }
-        .mini-btn { background: #444; color: white; border: none; padding: 8px 12px; border-radius: 4px; font-size: 11px; font-weight: bold; cursor: pointer; height: 38px; }
-        #lap-selector { display: flex; gap: 6px; overflow-x: auto; flex: 1; scrollbar-width: none; }
+        .mini-btn { background: #444; color: white; border: none; padding: 0 15px; border-radius: 4px; font-size: 12px; font-weight: bold; height: 40px; }
+        #lap-selector { display: flex; gap: 6px; overflow-x: auto; flex: 1; -webkit-overflow-scrolling: touch; }
         
-        /* ラップボタン内のテキスト個別色設定 */
-        .lap-btn { min-width: 85px; height: 42px; background: #2a2a2a; color: #ccc; border: 1px solid #555; border-radius: 6px; flex-shrink: 0; font-size: 11px; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+        /* ラップボタン文字色設定 */
+        .lap-btn { min-width: 85px; height: 42px; background: #2a2a2a; color: #ccc; border: 1px solid #555; border-radius: 6px; flex-shrink: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; }
         .lap-label-idx { font-weight: bold; font-size: 12px; }
         .lap-label-time { font-size: 11px; }
         
-        /* 【重要】最高速ラップはL●をオレンジ */
         .is-fastest .lap-label-idx { color: #FFA500 !important; }
-        
-        /* 【重要】ベストラップは〇〇sを赤 */
         .is-best .lap-label-time { color: #FF0000 !important; font-weight: bold; }
 
         .lap-btn.primary { border: 2px solid var(--hrc-red); background: #331111; }
         .lap-btn.secondary { border: 2px solid var(--hrc-blue); background: #111133; }
-        #seek-bar { width: 100%; height: 26px; cursor: pointer; accent-color: #ff4444; }
+        
+        #seek-bar { width: 100%; height: 35px; margin: 0; touch-action: none; accent-color: #ff4444; }
     </style>
 </head>
 <body>
@@ -57,7 +63,7 @@
 <div id="main-container">
     <div id="map"></div>
     <div id="offset-panel" class="draggable-panel">
-        <div class="panel-header" id="off-handle">✜ 補正ドラッグ</div>
+        <div class="panel-header" id="off-handle">✜ 補正</div>
         <button class="off-btn" style="grid-area:up" id="btn-up">↑</button>
         <button class="off-btn" style="grid-area:down" id="btn-down">↓</button>
         <button class="off-btn" style="grid-area:left" id="btn-left">←</button>
@@ -65,11 +71,11 @@
     </div>
     <div id="chart-area">
         <div id="data-dashboard" class="draggable-panel">
-            <div class="panel-header" id="dash-handle">✜ データドラッグ</div>
+            <div class="panel-header" id="dash-handle">✜ データ</div>
             <div id="dash-content">
-                <div id="dash-time" style="color: #aaa; font-size: 11px;">Time: 0.00s</div>
-                <div id="dash-l1-info" class="dash-l1">L1: --- km/h</div>
-                <div id="dash-l2-info" class="dash-l2">L2: --- km/h</div>
+                <div id="dash-time">Time: 0.00s</div>
+                <div id="dash-l1-info" class="dash-l1">L1: ---</div>
+                <div id="dash-l2-info" class="dash-l2">L2: ---</div>
                 <div id="dash-gap-info" class="dash-gap">Gap: 0.000s</div>
             </div>
         </div>
@@ -95,22 +101,36 @@ let map, marker1, marker2, telChart, deltaChart;
 let lapDataStore = [], sessionMaxSpeed = 0, latOffset = 0, lonOffset = 0, isPlaying = false, currentFrame = 0;
 let primaryIdx = -1, secondaryIdx = -1;
 
-map = L.map('map', { zoomControl: true, maxZoom: 22 }).setView([35.68, 139.76], 15);
+map = L.map('map', { zoomControl: false, maxZoom: 22 }).setView([35.68, 139.76], 15);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 22 }).addTo(map);
 marker1 = L.circleMarker([0,0], {color:'#000', fillColor:'#fff', radius:8, fillOpacity:1, weight:3});
 marker2 = L.circleMarker([0,0], {color:'#000', fillColor:'#33ccff', radius:6, fillOpacity:1, weight:2});
 
+// スマホ・PC両対応ドラッグ関数
 function makeDraggable(el, handle) {
-    let mx = 0, my = 0;
-    handle.onmousedown = (e) => {
-        e.preventDefault(); mx = e.clientX; my = e.clientY;
-        document.onmousemove = (de) => {
-            de.preventDefault(); let dx = mx - de.clientX; let dy = my - de.clientY;
-            mx = de.clientX; my = de.clientY;
-            el.style.top = (el.offsetTop - dy) + "px"; el.style.left = (el.offsetLeft - dx) + "px"; el.style.right = 'auto';
-        };
-        document.onmouseup = () => { document.onmousemove = null; document.onmouseup = null; };
+    let active = false, currentX, currentY, initialX, initialY, xOffset = 0, yOffset = 0;
+
+    const dragStart = (e) => {
+        initialX = (e.type === "touchstart" ? e.touches[0].clientX : e.clientX) - xOffset;
+        initialY = (e.type === "touchstart" ? e.touches[0].clientY : e.clientY) - yOffset;
+        if (e.target === handle) active = true;
     };
+    const dragEnd = () => { initialX = currentX; initialY = currentY; active = false; };
+    const drag = (e) => {
+        if (active) {
+            e.preventDefault();
+            currentX = (e.type === "touchmove" ? e.touches[0].clientX : e.clientX) - initialX;
+            currentY = (e.type === "touchmove" ? e.touches[0].clientY : e.clientY) - initialY;
+            xOffset = currentX; yOffset = currentY;
+            el.style.transform = `translate3d(${currentX}px, ${currentY}px, 0)`;
+        }
+    };
+    handle.addEventListener("touchstart", dragStart, {passive: false});
+    handle.addEventListener("mousedown", dragStart);
+    window.addEventListener("touchend", dragEnd);
+    window.addEventListener("mouseup", dragEnd);
+    window.addEventListener("touchmove", drag, {passive: false});
+    window.addEventListener("mousemove", drag);
 }
 makeDraggable(document.getElementById('offset-panel'), document.getElementById('off-handle'));
 makeDraggable(document.getElementById('data-dashboard'), document.getElementById('dash-handle'));
@@ -149,13 +169,14 @@ function updateFrame() {
     } else {
         document.getElementById('dash-l2-info').style.display = 'none'; document.getElementById('dash-gap-info').style.display = 'none';
     }
-    [telChart, deltaChart].forEach(chart => {
-        if (chart) {
-            const activeEls = [];
-            chart.data.datasets.forEach((ds, i) => { if(ds.display !== false) activeEls.push({datasetIndex: i, index: idx}); });
-            chart.setActiveElements(activeEls); chart.update('none');
-        }
-    });
+    if(telChart) {
+        const activeEls = [];
+        telChart.data.datasets.forEach((ds, i) => { if(ds.display !== false) activeEls.push({datasetIndex: i, index: idx}); });
+        telChart.setActiveElements(activeEls); telChart.update('none');
+    }
+    if(deltaChart) {
+        deltaChart.setActiveElements([{datasetIndex: 0, index: idx}]); deltaChart.update('none');
+    }
 }
 
 function findIndexByDistance(lap, d) {
@@ -173,7 +194,6 @@ document.getElementById('fileInput').onchange = e => {
 function parseGPX(xml) {
     const trks = xml.getElementsByTagName('trk'), selector = document.getElementById('lap-selector');
     selector.innerHTML = ''; lapDataStore = [];
-    
     for (let i = 0; i < trks.length; i++) {
         const pts = trks[i].getElementsByTagName('trkpt'); if (pts.length < 2) continue;
         let speeds = [], rpms = [], coords = [], times = [], dists = [], dAcc = 0, lapMaxV = 0;
@@ -191,21 +211,15 @@ function parseGPX(xml) {
         }
         lapDataStore.push({ speeds, rpms, coords, times, dists, duration: times[times.length-1], lapMaxV });
     }
-
     if (lapDataStore.length === 0) return;
-
-    // 最小タイム（ベスト）と最高速（ファステスト）のインデックス
     const bestIdx = lapDataStore.reduce((p, c, i, a) => c.duration < a[p].duration ? i : p, 0);
     const fastIdx = lapDataStore.reduce((p, c, i, a) => c.lapMaxV > a[p].lapMaxV ? i : p, 0);
     sessionMaxSpeed = lapDataStore[fastIdx].lapMaxV;
 
     lapDataStore.forEach((lap, i) => {
-        const btn = document.createElement('button');
-        btn.className = 'lap-btn';
+        const btn = document.createElement('button'); btn.className = 'lap-btn';
         if (i === bestIdx) btn.classList.add('is-best');
         if (i === fastIdx) btn.classList.add('is-fastest');
-        
-        // idxとtimeを別のspanにして個別指定
         btn.innerHTML = `<span class="lap-label-idx">L${i+1}</span><span class="lap-label-time">${lap.duration.toFixed(3)}s</span>`;
         btn.onclick = () => { 
             if (primaryIdx === -1 || (primaryIdx !== -1 && secondaryIdx !== -1)) { primaryIdx = i; secondaryIdx = -1; } 
@@ -214,7 +228,6 @@ function parseGPX(xml) {
         };
         selector.appendChild(btn);
     });
-
     primaryIdx = 0; updateUI(); map.setView(lapDataStore[0].coords[0], 17);
 }
 
@@ -242,27 +255,28 @@ function drawMapLines() {
 }
 
 function createCharts() {
+    const ctx1 = document.getElementById('telemetryChart').getContext('2d');
+    const ctx2 = document.getElementById('deltaChart').getContext('2d');
     const p = lapDataStore[primaryIdx], s = secondaryIdx >= 0 ? lapDataStore[secondaryIdx] : null;
     const ds = [
-        { data: p.speeds, borderColor: '#ff4444', borderWidth: 2.5, pointRadius: 0, pointHoverRadius: 5, pointBackgroundColor: '#fff', pointBorderWidth: 2, pointBorderColor: '#000' },
+        { data: p.speeds, borderColor: '#ff4444', borderWidth: 2, pointRadius: 0, pointHoverRadius: 5 },
         { data: p.rpms, yAxisID: 'yRPM', display: false }
     ];
-    if (s) ds.push({ data: p.dists.map(d => s.speeds[findIndexByDistance(s, d)]), borderColor: '#33ccff', borderWidth: 1.5, borderDash: [5,5], pointRadius: 0, pointHoverRadius: 5, pointBackgroundColor: '#33ccff', pointBorderWidth: 1, pointBorderColor: '#000' });
+    if (s) ds.push({ data: p.dists.map(d => s.speeds[findIndexByDistance(s, d)]), borderColor: '#33ccff', borderWidth: 1, borderDash: [5,5], pointRadius: 0 });
     if (telChart) telChart.destroy();
-    telChart = new Chart(document.getElementById('telemetryChart').getContext('2d'), {
+    telChart = new Chart(ctx1, {
         type: 'line', data: { labels: p.times.map(t => t.toFixed(2)), datasets: ds },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { enabled: false } }, scales: { y: { min: 0 }, yRPM: { position: 'right', grid: { display: false } }, x: { display: false } } }
+        options: { responsive: true, maintainAspectRatio: false, animation: false, plugins: { legend: { display: false } }, scales: { x: { display: false }, y: { min: 0 } } }
     });
     if (deltaChart) deltaChart.destroy();
     if (s) {
         const dd = p.dists.map((d, i) => s.times[findIndexByDistance(s, d)] - p.times[i]);
-        deltaChart = new Chart(document.getElementById('deltaChart').getContext('2d'), {
-            type: 'line', data: { labels: p.times.map(t => t.toFixed(2)), datasets: [{ data: dd, borderColor: '#0f0', fill: true, backgroundColor: 'rgba(0,255,0,0.1)', pointRadius: 0, pointHoverRadius: 5, pointBackgroundColor: '#0f0' }] },
-            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { enabled: false } }, scales: { x: { display: false } } }
+        deltaChart = new Chart(ctx2, {
+            type: 'line', data: { labels: p.times.map(t => t.toFixed(2)), datasets: [{ data: dd, borderColor: '#0f0', fill: true, backgroundColor: 'rgba(0,255,0,0.1)', pointRadius: 0 }] },
+            options: { responsive: true, maintainAspectRatio: false, animation: false, plugins: { legend: { display: false } }, scales: { x: { display: false } } }
         });
     }
 }
 </script>
 </body>
 </html>
-
