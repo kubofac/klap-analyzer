@@ -3,18 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-
- <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     
-    <title>KLAP ANALYZER V6.9.9</title>
-      <link rel="manifest" href="/manifest.json">  
+    <title>KLAP ANALYZER V6.9.9 (iOS Fix)</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
         :root { --hrc-red: #ff4444; --hrc-blue: #33ccff; --bg-dark: #0a0a0a; }
-        /* 画面全体のスクロールを禁止 */
         html, body { 
             background: var(--bg-dark); color: #eee; font-family: sans-serif; 
             margin: 0; padding: 0; height: 100dvh; width: 100vw;
@@ -26,30 +23,26 @@
         .chart-box { flex: 1; padding: 5px; box-sizing: border-box; min-height: 0; touch-action: none; }
         #delta-area { height: 100px; border-top: 1px solid #444; background: #000; }
         
-        /* ドラッグパネル */
         .draggable-panel { 
             position: absolute; z-index: 5000; background: rgba(0,0,0,0.9); 
             border-radius: 10px; border: 2px solid #555; overflow: hidden;
-            touch-action: none; /* ブラウザのスクロール干渉を防止 */
+            touch-action: none;
         }
         #offset-panel { top: 10px; left: 10px; padding: 5px; display: grid; grid-template-areas: "hd hd hd" ". up ." "left . right" ". down ."; gap: 5px; }
         .panel-header { grid-area: hd; background: #444; color: white; font-size: 11px; padding: 12px; text-align: center; cursor: move; font-weight: bold; border-radius: 4px; }
         .off-btn { width: 44px; height: 44px; background: #333; color: white; border: 1px solid #666; border-radius: 6px; font-size: 20px; display: flex; align-items: center; justify-content: center; }
 
-        /* データダッシュボード */
         #data-dashboard { top: 10px; right: 10px; min-width: 150px; }
         #dash-content { padding: 10px; font-family: 'Courier New', monospace; font-size: 13px; pointer-events: none; }
         .dash-l1 { color: var(--hrc-red); font-weight: bold; }
         .dash-l2 { color: var(--hrc-blue); font-weight: bold; }
         .dash-gap { color: #0f0; border-top: 1px solid #333; margin-top: 5px; padding-top: 3px; text-align: right; }
 
-        /* コントロール */
         #controls { height: 95px; background: #1a1a1a; border-top: 1px solid #333; padding: 5px 10px; box-sizing: border-box; display: flex; flex-direction: column; }
         .ctrl-row { display: flex; align-items: center; gap: 8px; flex: 1; overflow: hidden; }
-        .mini-btn { background: #444; color: white; border: none; padding: 0 15px; border-radius: 4px; font-size: 12px; font-weight: bold; height: 40px; }
+        .mini-btn { background: #444; color: white; border: none; padding: 0 15px; border-radius: 4px; font-size: 12px; font-weight: bold; height: 40px; display: flex; align-items: center; justify-content: center; text-decoration: none; }
         #lap-selector { display: flex; gap: 6px; overflow-x: auto; flex: 1; -webkit-overflow-scrolling: touch; }
         
-        /* ラップボタン文字色設定 */
         .lap-btn { min-width: 85px; height: 42px; background: #2a2a2a; color: #ccc; border: 1px solid #555; border-radius: 6px; flex-shrink: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; }
         .lap-label-idx { font-weight: bold; font-size: 12px; }
         .lap-label-time { font-size: 11px; }
@@ -61,6 +54,10 @@
         .lap-btn.secondary { border: 2px solid var(--hrc-blue); background: #111133; }
         
         #seek-bar { width: 100%; height: 35px; margin: 0; touch-action: none; accent-color: #ff4444; }
+
+        /* iOS対応：ファイル入力のラベル用スタイル */
+        .file-label { position: relative; overflow: hidden; cursor: pointer; }
+        .file-label input[type="file"] { position: absolute; left: 0; top: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; }
     </style>
 </head>
 <body>
@@ -92,12 +89,16 @@
 <div id="controls">
     <div class="ctrl-row">
         <button class="mini-btn" id="playBtn">PLAY</button>
-        <button class="mini-btn" id="fileBtn">FILE</button>
+        
+        <label class="mini-btn file-label">
+            FILE
+            <input type="file" id="fileInput" accept=".gpx">
+        </label>
+
         <button class="mini-btn" onclick="location.reload()">RELOAD</button>
         <div id="lap-selector"></div>
     </div>
     <input type="range" id="seek-bar" value="0" min="0" step="1">
-    <input type="file" id="fileInput" accept=".gpx" style="display:none">
 </div>
 
 <script>
@@ -111,10 +112,8 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 22 
 marker1 = L.circleMarker([0,0], {color:'#000', fillColor:'#fff', radius:8, fillOpacity:1, weight:3});
 marker2 = L.circleMarker([0,0], {color:'#000', fillColor:'#33ccff', radius:6, fillOpacity:1, weight:2});
 
-// スマホ・PC両対応ドラッグ関数
 function makeDraggable(el, handle) {
     let active = false, currentX, currentY, initialX, initialY, xOffset = 0, yOffset = 0;
-
     const dragStart = (e) => {
         initialX = (e.type === "touchstart" ? e.touches[0].clientX : e.clientX) - xOffset;
         initialY = (e.type === "touchstart" ? e.touches[0].clientY : e.clientY) - yOffset;
@@ -147,7 +146,6 @@ document.getElementById('btn-left').onclick = () => move(0, -0.000005);
 document.getElementById('btn-right').onclick = () => move(0, 0.000005);
 
 const playBtn = document.getElementById('playBtn'), seekBar = document.getElementById('seek-bar');
-document.getElementById('fileBtn').onclick = () => document.getElementById('fileInput').click();
 playBtn.onclick = () => { if (primaryIdx === -1) return; isPlaying = !isPlaying; playBtn.innerText = isPlaying ? "PAUSE" : "PLAY"; if (isPlaying) animate(); };
 
 function animate() {
@@ -190,10 +188,17 @@ function findIndexByDistance(lap, d) {
     return l;
 }
 
+// 修正：iPhone対応のファイル読み込み
 document.getElementById('fileInput').onchange = e => {
+    const file = e.target.files[0];
+    if (!file) return;
     const reader = new FileReader();
-    reader.onload = evt => parseGPX(new DOMParser().parseFromString(evt.target.result, "text/xml"));
-    reader.readAsText(e.target.files[0]);
+    reader.onload = evt => {
+        const xmlText = evt.target.result;
+        if (!xmlText) return alert("ファイルが空です");
+        parseGPX(new DOMParser().parseFromString(xmlText, "text/xml"));
+    };
+    reader.readAsText(file);
 };
 
 function parseGPX(xml) {
@@ -216,7 +221,8 @@ function parseGPX(xml) {
         }
         lapDataStore.push({ speeds, rpms, coords, times, dists, duration: times[times.length-1], lapMaxV });
     }
-    if (lapDataStore.length === 0) return;
+    if (lapDataStore.length === 0) return alert("有効なラップが見つかりません");
+    
     const bestIdx = lapDataStore.reduce((p, c, i, a) => c.duration < a[p].duration ? i : p, 0);
     const fastIdx = lapDataStore.reduce((p, c, i, a) => c.lapMaxV > a[p].lapMaxV ? i : p, 0);
     sessionMaxSpeed = lapDataStore[fastIdx].lapMaxV;
@@ -285,5 +291,3 @@ function createCharts() {
 </script>
 </body>
 </html>
-
-
