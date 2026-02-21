@@ -270,26 +270,103 @@ function createCharts() {
     const ctx1 = document.getElementById('telemetryChart').getContext('2d');
     const ctx2 = document.getElementById('deltaChart').getContext('2d');
     const p = lapDataStore[primaryIdx], s = secondaryIdx >= 0 ? lapDataStore[secondaryIdx] : null;
+
+    // メインテレメトリ（速度 + 回転数）のデータセット
     const ds = [
-        { data: p.speeds, borderColor: '#ff4444', borderWidth: 2, pointRadius: 0, pointHoverRadius: 5 },
-        { data: p.rpms, yAxisID: 'yRPM', display: false }
+        { 
+            label: 'Speed (L1)',
+            data: p.speeds, 
+            borderColor: '#ff4444', 
+            borderWidth: 2, 
+            pointRadius: 0, 
+            yAxisID: 'y' 
+        },
+        { 
+            label: 'RPM (L1)',
+            data: p.rpms, 
+            borderColor: '#ffff00', 
+            borderWidth: 1, 
+            pointRadius: 0, 
+            yAxisID: 'yRPM', // 回転数専用の右軸を使用
+            display: true    // 表示を有効化
+        }
     ];
-    if (s) ds.push({ data: p.dists.map(d => s.speeds[findIndexByDistance(s, d)]), borderColor: '#33ccff', borderWidth: 1, borderDash: [5,5], pointRadius: 0 });
+
+    // 比較対象（L2）がある場合、速度のみ点線で追加
+    if (s) {
+        ds.push({ 
+            label: 'Speed (L2)',
+            data: p.dists.map(d => s.speeds[findIndexByDistance(s, d)]), 
+            borderColor: '#33ccff', 
+            borderWidth: 1, 
+            borderDash: [5,5], 
+            pointRadius: 0,
+            yAxisID: 'y'
+        });
+    }
+
     if (telChart) telChart.destroy();
     telChart = new Chart(ctx1, {
-        type: 'line', data: { labels: p.times.map(t => t.toFixed(2)), datasets: ds },
-        options: { responsive: true, maintainAspectRatio: false, animation: false, plugins: { legend: { display: false } }, scales: { x: { display: false }, y: { min: 0 } } }
+        type: 'line', 
+        data: { labels: p.times.map(t => t.toFixed(2)), datasets: ds },
+        options: { 
+            responsive: true, 
+            maintainAspectRatio: false, 
+            animation: false, 
+            plugins: { legend: { display: false } }, 
+            scales: { 
+                x: { display: false }, 
+                y: { 
+                    min: 0, 
+                    position: 'left',
+                    title: { display: true, text: 'km/h', color: '#ff4444' },
+                    ticks: { color: '#ff4444' } 
+                },
+                yRPM: { 
+                    min: 0, 
+                    position: 'right',
+                    grid: { drawOnChartArea: false }, // グリッドが速度軸と重なって見づらくなるのを防ぐ
+                    title: { display: true, text: 'RPM', color: '#ffff00' },
+                    ticks: { color: '#ffff00' }
+                }
+            } 
+        }
     });
+
+    // デルタ（タイム差）グラフの作成
     if (deltaChart) deltaChart.destroy();
     if (s) {
         const dd = p.dists.map((d, i) => s.times[findIndexByDistance(s, d)] - p.times[i]);
         deltaChart = new Chart(ctx2, {
-            type: 'line', data: { labels: p.times.map(t => t.toFixed(2)), datasets: [{ data: dd, borderColor: '#0f0', fill: true, backgroundColor: 'rgba(0,255,0,0.1)', pointRadius: 0 }] },
-            options: { responsive: true, maintainAspectRatio: false, animation: false, plugins: { legend: { display: false } }, scales: { x: { display: false } } }
+            type: 'line', 
+            data: { 
+                labels: p.times.map(t => t.toFixed(2)), 
+                datasets: [{ 
+                    data: dd, 
+                    borderColor: '#0f0', 
+                    fill: true, 
+                    backgroundColor: 'rgba(0,255,0,0.1)', 
+                    pointRadius: 0 
+                }] 
+            },
+            options: { 
+                responsive: true, 
+                maintainAspectRatio: false, 
+                animation: false, 
+                plugins: { legend: { display: false } }, 
+                scales: { 
+                    x: { display: false },
+                    y: {
+                        ticks: { color: '#0f0' },
+                        grid: { color: '#333' }
+                    }
+                } 
+            }
         });
     }
 }
 </script>
 </body>
 </html>
+
 
