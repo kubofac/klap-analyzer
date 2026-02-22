@@ -271,10 +271,10 @@ function createCharts() {
     const ctx2 = document.getElementById('deltaChart').getContext('2d');
     const p = lapDataStore[primaryIdx], s = secondaryIdx >= 0 ? lapDataStore[secondaryIdx] : null;
 
-    // メインテレメトリ（速度 + 回転数）のデータセット
+    // データセットの初期化 (L1のデータ)
     const ds = [
         { 
-            label: 'Speed (L1)',
+            label: 'L1 Speed', 
             data: p.speeds, 
             borderColor: '#ff4444', 
             borderWidth: 2, 
@@ -282,32 +282,41 @@ function createCharts() {
             yAxisID: 'y' 
         },
         { 
-            label: 'RPM (L1)',
+            label: 'L1 RPM', 
             data: p.rpms, 
-            borderColor: '#ffff00', 
+            borderColor: 'rgba(255, 68, 68, 0.3)', 
             borderWidth: 1, 
             pointRadius: 0, 
-            yAxisID: 'yRPM', // 回転数専用の右軸を使用
-            display: true    // 表示を有効化
+            yAxisID: 'yRPM',
+            fill: false
         }
     ];
 
-    // 比較対象（L2）がある場合、速度のみ点線で追加
+    // L2が選択されている場合、L2の速度と回転数を追加
     if (s) {
         ds.push({ 
-            label: 'Speed (L2)',
+            label: 'L2 Speed', 
             data: p.dists.map(d => s.speeds[findIndexByDistance(s, d)]), 
             borderColor: '#33ccff', 
-            borderWidth: 1, 
-            borderDash: [5,5], 
+            borderWidth: 2, 
+            borderDash: [5, 5], 
             pointRadius: 0,
             yAxisID: 'y'
+        });
+        ds.push({ 
+            label: 'L2 RPM', 
+            data: p.dists.map(d => s.rpms[findIndexByDistance(s, d)]), 
+            borderColor: 'rgba(51, 204, 255, 0.3)', 
+            borderWidth: 1, 
+            borderDash: [2, 2],
+            pointRadius: 0, 
+            yAxisID: 'yRPM'
         });
     }
 
     if (telChart) telChart.destroy();
     telChart = new Chart(ctx1, {
-        type: 'line', 
+        type: 'line',
         data: { labels: p.times.map(t => t.toFixed(2)), datasets: ds },
         options: { 
             responsive: true, 
@@ -318,22 +327,19 @@ function createCharts() {
                 x: { display: false }, 
                 y: { 
                     min: 0, 
-                    position: 'left',
-                    title: { display: true, text: 'km/h', color: '#ff4444' },
-                    ticks: { color: '#ff4444' } 
+                    title: { display: true, text: 'Km/h', color: '#eee' } 
                 },
                 yRPM: { 
+                    position: 'right', 
                     min: 0, 
-                    position: 'right',
-                    grid: { drawOnChartArea: false }, // グリッドが速度軸と重なって見づらくなるのを防ぐ
-                    title: { display: true, text: 'RPM', color: '#ffff00' },
-                    ticks: { color: '#ffff00' }
-                }
+                    grid: { drawOnChartArea: false },
+                    title: { display: true, text: 'RPM', color: '#eee' }
+                } 
             } 
         }
     });
 
-    // デルタ（タイム差）グラフの作成
+    // デルタチャート（タイム差）の更新
     if (deltaChart) deltaChart.destroy();
     if (s) {
         const dd = p.dists.map((d, i) => s.times[findIndexByDistance(s, d)] - p.times[i]);
@@ -354,13 +360,7 @@ function createCharts() {
                 maintainAspectRatio: false, 
                 animation: false, 
                 plugins: { legend: { display: false } }, 
-                scales: { 
-                    x: { display: false },
-                    y: {
-                        ticks: { color: '#0f0' },
-                        grid: { color: '#333' }
-                    }
-                } 
+                scales: { x: { display: false } } 
             }
         });
     }
@@ -368,5 +368,6 @@ function createCharts() {
 </script>
 </body>
 </html>
+
 
 
