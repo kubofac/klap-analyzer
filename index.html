@@ -13,12 +13,26 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
-        :root { --hrc-red: #ff4444; --hrc-blue: #33ccff; --bg-dark: #0a0a0a; }
-        html, body { 
-            background: var(--bg-dark); color: #eee; font-family: sans-serif; 
-            margin: 0; padding: 0; height: 100dvh; width: 100vw;
-            overflow: hidden; position: fixed; touch-action: none;
-        }
+       :root { --hrc-red: #ff4444; --hrc-blue: #33ccff; --bg-dark: #0a0a0a; }
+
+/* 画面全体のスクロール・バウンスを完全に禁止 */
+html, body { 
+    background: var(--bg-dark); color: #eee; font-family: sans-serif; 
+    margin: 0; padding: 0; height: 100%; width: 100%;
+    overflow: hidden; position: fixed; 
+    touch-action: none; 
+    overscroll-behavior: none;
+}
+
+/* シークバーのタッチ操作を独立させる */
+#seek-bar { 
+    width: 100%; 
+    height: 40px; 
+    margin: 0; 
+    touch-action: none; 
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+}
         #main-container { display: flex; flex: 1; height: calc(100dvh - 95px); position: relative; }
         #map { width: 45%; height: 100%; border-right: 1px solid var(--hrc-red); background: #222; }
         #chart-area { width: 55%; height: 100%; background: #111; display: flex; flex-direction: column; position: relative; }
@@ -55,7 +69,6 @@
         .lap-btn.primary { border: 2px solid var(--hrc-red); background: #331111; }
         .lap-btn.secondary { border: 2px solid var(--hrc-blue); background: #111133; }
         
-        #seek-bar { width: 100%; height: 35px; margin: 0; touch-action: none; accent-color: #ff4444; }
 
         /* iOS対応：ファイル入力のラベル用スタイル */
         .file-label { position: relative; overflow: hidden; cursor: pointer; }
@@ -163,6 +176,7 @@ function updateFrame() {
     const p = lapDataStore[primaryIdx], s = secondaryIdx >= 0 ? lapDataStore[secondaryIdx] : null;
     const idx = Math.min(currentFrame, p.speeds.length - 1);
     
+    // マーカー移動
     marker1.setLatLng([p.coords[idx][0] + latOffset, p.coords[idx][1] + lonOffset]).addTo(map);
     let sIdx = 0;
     if (s) { 
@@ -170,6 +184,7 @@ function updateFrame() {
         marker2.setLatLng([s.coords[sIdx][0] + latOffset, s.coords[sIdx][1] + lonOffset]).addTo(map); 
     }
 
+    // ダッシュボード数値更新
     document.getElementById('dash-time').innerText = `Time: ${p.times[idx].toFixed(2)}s`;
     document.getElementById('dash-l1-info').innerText = `L1: ${p.speeds[idx]}km/h / ${p.rpms[idx]}r`;
     if (s) {
@@ -182,12 +197,12 @@ function updateFrame() {
         document.getElementById('dash-gap-info').style.display = 'none';
     }
 
-    // グラフの縦線（シーク位置）を更新
+    // グラフの縦線（シークバー同期）を更新
     [telChart, deltaChart].forEach(chart => {
         if (chart && chart.options.plugins.annotation) {
             chart.options.plugins.annotation.annotations.line1.xMin = idx;
             chart.options.plugins.annotation.annotations.line1.xMax = idx;
-            chart.update('none');
+            chart.update('none'); // アニメーションなしで高速描画
         }
     });
 }
@@ -279,27 +294,27 @@ function createCharts() {
     const ctx2 = document.getElementById('deltaChart').getContext('2d');
     const p = lapDataStore[primaryIdx], s = secondaryIdx >= 0 ? lapDataStore[secondaryIdx] : null;
 
+    // データセット（L1は実線、L2は点線で差別化）
     const ds = [
         { label: 'Speed (L1)', data: p.speeds, borderColor: '#ff4444', borderWidth: 2, pointRadius: 0, yAxisID: 'y' },
-        { label: 'RPM (L1)', data: p.rpms, borderColor: '#ffff00', borderWidth: 1, pointRadius: 0, yAxisID: 'yRPM', display: true }
+        { label: 'RPM (L1)', data: p.rpms, borderColor: '#ffff00', borderWidth: 1, pointRadius: 0, yAxisID: 'yRPM' }
     ];
 
     if (s) {
         ds.push({ 
-            label: 'Speed (L2)', 
-            data: p.dists.map(d => s.speeds[findIndexByDistance(s, d)]), 
+            label: 'Speed (L2)', data: p.dists.map(d => s.speeds[findIndexByDistance(s, d)]), 
             borderColor: '#33ccff', borderWidth: 1, borderDash: [5,5], pointRadius: 0, yAxisID: 'y' 
         });
         ds.push({ 
-            label: 'RPM (L2)', 
-            data: p.dists.map(d => s.rpms[findIndexByDistance(s, d)]), 
+            label: 'RPM (L2)', data: p.dists.map(d => s.rpms[findIndexByDistance(s, d)]), 
             borderColor: '#00ffff', borderWidth: 1, borderDash: [2,2], pointRadius: 0, yAxisID: 'yRPM' 
         });
     }
 
+    // 縦線設定
     const commonAnnotation = {
         annotations: {
-            line1: { type: 'line', xMin: 0, xMax: 0, borderColor: 'rgba(255, 255, 255, 0.7)', borderWidth: 1, label: { display: false } }
+            line1: { type: 'line', xMin: 0, xMax: 0, borderColor: 'rgba(255, 255, 255, 0.7)', borderWidth: 1 }
         }
     };
 
@@ -335,6 +350,7 @@ function createCharts() {
 </script>
 </body>
 </html>
+
 
 
 
