@@ -3,59 +3,37 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <title>KLAP ANALYZER V6.9.9</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1"></script>
     
-    <title>KLAP ANALYZER V6.9.9 (iOS Fix)</title>
-      <link rel="manifest" href="/manifest.json">  
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
-       :root { --hrc-red: #ff4444; --hrc-blue: #33ccff; --bg-dark: #0a0a0a; }
+        :root { --hrc-red: #ff4444; --hrc-blue: #33ccff; --bg-dark: #0a0a0a; }
+        
+        /* 画面全体のスクロール・バウンスを徹底的に禁止 */
+        html, body { 
+            background: var(--bg-dark); color: #eee; font-family: sans-serif; 
+            margin: 0; padding: 0; height: 100dvh; width: 100vw;
+            overflow: hidden; position: fixed; 
+            touch-action: none; 
+            overscroll-behavior: none;
+        }
 
-/* 画面全体のスクロール・バウンスを完全に禁止 */
-html, body { 
-    background: var(--bg-dark); color: #eee; font-family: sans-serif; 
-    margin: 0; padding: 0; height: 100%; width: 100%;
-    overflow: hidden; position: fixed; 
-    touch-action: none; 
-    overscroll-behavior: none;
-}
+        #main-container { 
+            display: flex; 
+            height: calc(100dvh - 95px); 
+            position: relative; 
+            width: 100%;
+        }
 
-/* シークバーのタッチ操作を独立させる */
-#seek-bar { 
-    width: 100%; 
-    height: 40px; 
-    margin: 0; 
-    touch-action: none; 
-    -webkit-appearance: none; 
-    background: transparent;
-    cursor: pointer;
-}
-
-/* つまみ（スライダー）を大きくして操作しやすくする */
-#seek-bar::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    height: 25px;
-    width: 25px;
-    border-radius: 50%;
-    background: var(--hrc-red);
-    cursor: pointer;
-    margin-top: -10px;
-}
-
-#seek-bar::-webkit-slider-runnable-track {
-    width: 100%;
-    height: 5px;
-    background: #444;
-}
         #map { width: 45%; height: 100%; border-right: 1px solid var(--hrc-red); background: #222; }
         #chart-area { width: 55%; height: 100%; background: #111; display: flex; flex-direction: column; position: relative; }
         .chart-box { flex: 1; padding: 5px; box-sizing: border-box; min-height: 0; touch-action: none; }
         #delta-area { height: 100px; border-top: 1px solid #444; background: #000; }
         
+        /* ドラッグパネル */
         .draggable-panel { 
             position: absolute; z-index: 5000; background: rgba(0,0,0,0.9); 
             border-radius: 10px; border: 2px solid #555; overflow: hidden;
@@ -65,43 +43,40 @@ html, body {
         .panel-header { grid-area: hd; background: #444; color: white; font-size: 11px; padding: 12px; text-align: center; cursor: move; font-weight: bold; border-radius: 4px; }
         .off-btn { width: 44px; height: 44px; background: #333; color: white; border: 1px solid #666; border-radius: 6px; font-size: 20px; display: flex; align-items: center; justify-content: center; }
 
+        /* データダッシュボード */
         #data-dashboard { top: 10px; right: 10px; min-width: 150px; }
         #dash-content { padding: 10px; font-family: 'Courier New', monospace; font-size: 13px; pointer-events: none; }
         .dash-l1 { color: var(--hrc-red); font-weight: bold; }
         .dash-l2 { color: var(--hrc-blue); font-weight: bold; }
         .dash-gap { color: #0f0; border-top: 1px solid #333; margin-top: 5px; padding-top: 3px; text-align: right; }
 
-     #controls { 
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    width: 100%;
-    height: 95px; 
-    background: #1a1a1a; 
-    border-top: 1px solid #333; 
-    padding: 5px 10px; 
-    box-sizing: border-box; 
-    display: flex; 
-    flex-direction: column; 
-    z-index: 9999; /* 他の要素より手前に表示 */
-}
-        .mini-btn { background: #444; color: white; border: none; padding: 0 15px; border-radius: 4px; font-size: 12px; font-weight: bold; height: 40px; display: flex; align-items: center; justify-content: center; text-decoration: none; }
+        /* コントロール（最下部に固定） */
+        #controls { 
+            position: fixed; bottom: 0; left: 0; width: 100%;
+            height: 95px; background: #1a1a1a; border-top: 1px solid #333; 
+            padding: 5px 10px; box-sizing: border-box; 
+            display: flex; flex-direction: column; z-index: 9999;
+        }
+        .ctrl-row { display: flex; align-items: center; gap: 8px; flex: 1; overflow: hidden; }
+        .mini-btn { background: #444; color: white; border: none; padding: 0 15px; border-radius: 4px; font-size: 12px; font-weight: bold; height: 40px; }
         #lap-selector { display: flex; gap: 6px; overflow-x: auto; flex: 1; -webkit-overflow-scrolling: touch; }
         
         .lap-btn { min-width: 85px; height: 42px; background: #2a2a2a; color: #ccc; border: 1px solid #555; border-radius: 6px; flex-shrink: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; }
         .lap-label-idx { font-weight: bold; font-size: 12px; }
         .lap-label-time { font-size: 11px; }
-        
         .is-fastest .lap-label-idx { color: #FFA500 !important; }
         .is-best .lap-label-time { color: #FF0000 !important; font-weight: bold; }
-
         .lap-btn.primary { border: 2px solid var(--hrc-red); background: #331111; }
         .lap-btn.secondary { border: 2px solid var(--hrc-blue); background: #111133; }
         
-
-        /* iOS対応：ファイル入力のラベル用スタイル */
-        .file-label { position: relative; overflow: hidden; cursor: pointer; }
-        .file-label input[type="file"] { position: absolute; left: 0; top: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; }
+        /* シークバー設定 */
+        #seek-bar { 
+            width: 100%; height: 40px; margin: 0; 
+            touch-action: none; accent-color: #ff4444;
+            -webkit-appearance: none; background: transparent;
+        }
+        #seek-bar::-webkit-slider-runnable-track { width: 100%; height: 6px; background: #444; border-radius: 3px; }
+        #seek-bar::-webkit-slider-thumb { -webkit-appearance: none; height: 24px; width: 24px; border-radius: 50%; background: var(--hrc-red); margin-top: -9px; }
     </style>
 </head>
 <body>
@@ -133,16 +108,12 @@ html, body {
 <div id="controls">
     <div class="ctrl-row">
         <button class="mini-btn" id="playBtn">PLAY</button>
-        
-        <label class="mini-btn file-label">
-            FILE
-            <input type="file" id="fileInput" accept=".gpx">
-        </label>
-
+        <button class="mini-btn" id="fileBtn">FILE</button>
         <button class="mini-btn" onclick="location.reload()">RELOAD</button>
         <div id="lap-selector"></div>
     </div>
     <input type="range" id="seek-bar" value="0" min="0" step="1">
+    <input type="file" id="fileInput" accept=".gpx" style="display:none">
 </div>
 
 <script>
@@ -151,11 +122,13 @@ let map, marker1, marker2, telChart, deltaChart;
 let lapDataStore = [], sessionMaxSpeed = 0, latOffset = 0, lonOffset = 0, isPlaying = false, currentFrame = 0;
 let primaryIdx = -1, secondaryIdx = -1;
 
+// Leaflet初期化
 map = L.map('map', { zoomControl: false, maxZoom: 22 }).setView([35.68, 139.76], 15);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 22 }).addTo(map);
 marker1 = L.circleMarker([0,0], {color:'#000', fillColor:'#fff', radius:8, fillOpacity:1, weight:3});
 marker2 = L.circleMarker([0,0], {color:'#000', fillColor:'#33ccff', radius:6, fillOpacity:1, weight:2});
 
+// ドラッグ機能
 function makeDraggable(el, handle) {
     let active = false, currentX, currentY, initialX, initialY, xOffset = 0, yOffset = 0;
     const dragStart = (e) => {
@@ -183,6 +156,7 @@ function makeDraggable(el, handle) {
 makeDraggable(document.getElementById('offset-panel'), document.getElementById('off-handle'));
 makeDraggable(document.getElementById('data-dashboard'), document.getElementById('dash-handle'));
 
+// マップ位置微調整
 const move = (la, lo) => { latOffset += la; lonOffset += lo; drawMapLines(); updateFrame(); };
 document.getElementById('btn-up').onclick = () => move(0.000005, 0);
 document.getElementById('btn-down').onclick = () => move(-0.000005, 0);
@@ -190,15 +164,27 @@ document.getElementById('btn-left').onclick = () => move(0, -0.000005);
 document.getElementById('btn-right').onclick = () => move(0, 0.000005);
 
 const playBtn = document.getElementById('playBtn'), seekBar = document.getElementById('seek-bar');
-playBtn.onclick = () => { if (primaryIdx === -1) return; isPlaying = !isPlaying; playBtn.innerText = isPlaying ? "PAUSE" : "PLAY"; if (isPlaying) animate(); };
+document.getElementById('fileBtn').onclick = () => document.getElementById('fileInput').click();
+
+playBtn.onclick = () => { 
+    if (primaryIdx === -1) return; 
+    isPlaying = !isPlaying; 
+    playBtn.innerText = isPlaying ? "PAUSE" : "PLAY"; 
+    if (isPlaying) animate(); 
+};
 
 function animate() {
     if (!isPlaying) return;
     const p = lapDataStore[primaryIdx];
-    if (currentFrame >= p.speeds.length - 1) { currentFrame = 0; isPlaying = false; playBtn.innerText = "PLAY"; }
-    else { currentFrame++; seekBar.value = currentFrame; updateFrame(); requestAnimationFrame(animate); }
+    if (currentFrame >= p.speeds.length - 1) { 
+        currentFrame = 0; isPlaying = false; playBtn.innerText = "PLAY"; 
+    } else { 
+        currentFrame++; seekBar.value = currentFrame; updateFrame(); requestAnimationFrame(animate); 
+    }
 }
+
 seekBar.oninput = () => { currentFrame = parseInt(seekBar.value); updateFrame(); };
+seekBar.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
 
 function updateFrame() {
     if (primaryIdx === -1 || !lapDataStore[primaryIdx]) return;
@@ -213,7 +199,7 @@ function updateFrame() {
         marker2.setLatLng([s.coords[sIdx][0] + latOffset, s.coords[sIdx][1] + lonOffset]).addTo(map); 
     }
 
-    // ダッシュボード数値更新
+    // 数値表示更新
     document.getElementById('dash-time').innerText = `Time: ${p.times[idx].toFixed(2)}s`;
     document.getElementById('dash-l1-info').innerText = `L1: ${p.speeds[idx]}km/h / ${p.rpms[idx]}r`;
     if (s) {
@@ -226,32 +212,26 @@ function updateFrame() {
         document.getElementById('dash-gap-info').style.display = 'none';
     }
 
-    // グラフの縦線（シークバー同期）を更新
+    // グラフ縦線同期
     [telChart, deltaChart].forEach(chart => {
         if (chart && chart.options.plugins.annotation) {
             chart.options.plugins.annotation.annotations.line1.xMin = idx;
             chart.options.plugins.annotation.annotations.line1.xMax = idx;
-            chart.update('none'); // アニメーションなしで高速描画
+            chart.update('none');
         }
     });
 }
+
 function findIndexByDistance(lap, d) {
     let l = 0, r = lap.dists.length - 1;
     while (l < r) { let m = (l + r) >> 1; if (lap.dists[m] < d) l = m + 1; else r = m; }
     return l;
 }
 
-// 修正：iPhone対応のファイル読み込み
 document.getElementById('fileInput').onchange = e => {
-    const file = e.target.files[0];
-    if (!file) return;
     const reader = new FileReader();
-    reader.onload = evt => {
-        const xmlText = evt.target.result;
-        if (!xmlText) return alert("ファイルが空です");
-        parseGPX(new DOMParser().parseFromString(xmlText, "text/xml"));
-    };
-    reader.readAsText(file);
+    reader.onload = evt => parseGPX(new DOMParser().parseFromString(evt.target.result, "text/xml"));
+    reader.readAsText(e.target.files[0]);
 };
 
 function parseGPX(xml) {
@@ -274,8 +254,7 @@ function parseGPX(xml) {
         }
         lapDataStore.push({ speeds, rpms, coords, times, dists, duration: times[times.length-1], lapMaxV });
     }
-    if (lapDataStore.length === 0) return alert("有効なラップが見つかりません");
-    
+    if (lapDataStore.length === 0) return;
     const bestIdx = lapDataStore.reduce((p, c, i, a) => c.duration < a[p].duration ? i : p, 0);
     const fastIdx = lapDataStore.reduce((p, c, i, a) => c.lapMaxV > a[p].lapMaxV ? i : p, 0);
     sessionMaxSpeed = lapDataStore[fastIdx].lapMaxV;
@@ -300,7 +279,10 @@ function updateUI() {
         b.classList.remove('primary', 'secondary');
         if (i === primaryIdx) b.classList.add('primary'); if (i === secondaryIdx) b.classList.add('secondary');
     });
-    if (primaryIdx !== -1) { seekBar.max = lapDataStore[primaryIdx].speeds.length - 1; drawMapLines(); createCharts(); updateFrame(); }
+    if (primaryIdx !== -1) { 
+        seekBar.max = lapDataStore[primaryIdx].speeds.length - 1; 
+        drawMapLines(); createCharts(); updateFrame(); 
+    }
 }
 
 function drawMapLines() {
@@ -323,7 +305,6 @@ function createCharts() {
     const ctx2 = document.getElementById('deltaChart').getContext('2d');
     const p = lapDataStore[primaryIdx], s = secondaryIdx >= 0 ? lapDataStore[secondaryIdx] : null;
 
-    // データセット（L1は実線、L2は点線で差別化）
     const ds = [
         { label: 'Speed (L1)', data: p.speeds, borderColor: '#ff4444', borderWidth: 2, pointRadius: 0, yAxisID: 'y' },
         { label: 'RPM (L1)', data: p.rpms, borderColor: '#ffff00', borderWidth: 1, pointRadius: 0, yAxisID: 'yRPM' }
@@ -340,7 +321,6 @@ function createCharts() {
         });
     }
 
-    // 縦線設定
     const commonAnnotation = {
         annotations: {
             line1: { type: 'line', xMin: 0, xMax: 0, borderColor: 'rgba(255, 255, 255, 0.7)', borderWidth: 1 }
@@ -376,21 +356,13 @@ function createCharts() {
         });
     }
 }
-window.addEventListener('resize', () => {
-    const vh = window.innerHeight * 0.01;
-    document.documentElement.style.setProperty('--vh', `${vh}px`);
-    // 必要に応じて高さを再計算
-});
 
-    
+// 画面揺れ防止の最終ガード
+document.addEventListener('touchmove', (e) => {
+    if (e.target.closest('#controls') || e.target.closest('.draggable-panel')) {
+        e.preventDefault();
+    }
+}, { passive: false });
 </script>
 </body>
 </html>
-
-
-
-
-
-
-
-
