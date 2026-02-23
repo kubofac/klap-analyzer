@@ -13,14 +13,16 @@
         :root { --hrc-red: #ff4444; --hrc-blue: #33ccff; --bg-dark: #0a0a0a; }
         
         /* 画面全体のスクロール・バウンスを徹底的に禁止 */
-        html, body { 
-            background: var(--bg-dark); color: #eee; font-family: sans-serif; 
-            margin: 0; padding: 0; height: 100dvh; width: 100vw;
-            overflow: hidden; position: fixed; 
-            touch-action: none; 
-            overscroll-behavior: none;
-        }
-
+       html, body {
+    overflow: hidden;
+    position: fixed;
+    width: 100%;
+    height: 100%;
+    /* 画面のどこを触ってもスクロールさせない設定 */
+    touch-action: none !important; 
+    -webkit-overflow-scrolling: none;
+    overscroll-behavior: none;
+}
         #main-container { 
             display: flex; 
             height: calc(100dvh - 95px); 
@@ -56,6 +58,7 @@
             height: 95px; background: #1a1a1a; border-top: 1px solid #333; 
             padding: 5px 10px; box-sizing: border-box; 
             display: flex; flex-direction: column; z-index: 9999;
+            touch-action: none !important;
         }
         .ctrl-row { display: flex; align-items: center; gap: 8px; flex: 1; overflow: hidden; }
         .mini-btn { background: #444; color: white; border: none; padding: 0 15px; border-radius: 4px; font-size: 12px; font-weight: bold; height: 40px; }
@@ -357,12 +360,25 @@ function createCharts() {
     }
 }
 
-// 画面揺れ防止の最終ガード
-document.addEventListener('touchmove', (e) => {
-    if (e.target.closest('#controls') || e.target.closest('.draggable-panel')) {
+(function() {
+    // 画面全体のスクロールを強制停止
+    window.addEventListener('touchmove', function(e) {
+        // シークバー(range)やつまみを操作している間は、ブラウザのスクロールを100%拒否する
         e.preventDefault();
-    }
-}, { passive: false });
+    }, { passive: false });
+
+    // シークバー自体のイベントを最優先にする
+    const sb = document.getElementById('seek-bar');
+    sb.addEventListener('touchmove', function(e) {
+        e.stopPropagation(); // 親要素にイベントを渡さない
+    }, { passive: false });
+
+    // グラフエリアも念のためガード
+    document.getElementById('chart-area').addEventListener('touchmove', function(e) {
+        e.preventDefault();
+    }, { passive: false });
+})();
 </script>
 </body>
 </html>
+
