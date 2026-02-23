@@ -60,6 +60,7 @@
             padding: 5px 10px; box-sizing: border-box; 
             display: flex; flex-direction: column; z-index: 9999;
             touch-action: none !important;
+            overscroll-behavior-x: none !important; /* 横方向の画面スライドを禁止 */
         }
         .ctrl-row { display: flex; align-items: center; gap: 8px; flex: 1; overflow: hidden; }
         .mini-btn { background: #444; color: white; border: none; padding: 0 15px; border-radius: 4px; font-size: 12px; font-weight: bold; height: 40px; }
@@ -363,10 +364,16 @@ function createCharts() {
 
 (function() {
     // 画面全体のスクロールを強制停止
-    window.addEventListener('touchmove', function(e) {
-        // シークバー(range)やつまみを操作している間は、ブラウザのスクロールを100%拒否する
-        e.preventDefault();
-    }, { passive: false });
+   window.addEventListener('touchmove', function(e) {
+    // 全体の動きを止める
+    if (e.cancelable) e.preventDefault();
+}, { passive: false });
+
+// シークバー操作中に他の画面へ行かないようにガードを固める
+seekBar.addEventListener('touchmove', function(e) {
+    // 親要素やブラウザに「スライドした」という情報を伝えない
+    e.stopPropagation();
+}, { passive: false });
 
     // シークバー自体のイベントを最優先にする
     const sb = document.getElementById('seek-bar');
@@ -382,5 +389,6 @@ function createCharts() {
 </script>
 </body>
 </html>
+
 
 
