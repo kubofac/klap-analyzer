@@ -3,85 +3,41 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>KLAP ANALYZER V6.9.9</title>
-     <link rel="manifest" href="/manifest.json">  
+    <title>KLAP ANALYZER V7.0.1</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1"></script>
-    
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
         :root { --hrc-red: #ff4444; --hrc-blue: #33ccff; --bg-dark: #0a0a0a; }
-        
-        /* 画面全体のスクロール・バウンスを徹底的に禁止 */
-       html, body {
-    overflow: hidden;
-    position: fixed;
-    width: 100%;
-    height: 100%;
-    /* 画面のどこを触ってもスクロールさせない設定 */
-    touch-action: none !important; 
-    -webkit-overflow-scrolling: none;
-    overscroll-behavior: none;
-}
-        #main-container { 
-            display: flex; 
-            height: calc(100dvh - 95px); 
-            position: relative; 
-            width: 100%;
-        }
-
+        html, body { overflow: hidden; position: fixed; width: 100%; height: 100%; touch-action: none !important; background: #000; }
+        #main-container { display: flex; height: calc(100dvh - 105px); position: relative; width: 100%; }
         #map { width: 45%; height: 100%; border-right: 1px solid var(--hrc-red); background: #222; }
         #chart-area { width: 55%; height: 100%; background: #111; display: flex; flex-direction: column; position: relative; }
-        .chart-box { flex: 1; padding: 5px; box-sizing: border-box; min-height: 0; touch-action: none; }
-        #delta-area { height: 100px; border-top: 1px solid #444; background: #000; }
-        
-        /* ドラッグパネル */
-        .draggable-panel { 
-            position: absolute; z-index: 5000; background: rgba(0,0,0,0.9); 
-            border-radius: 10px; border: 2px solid #555; overflow: hidden;
-            touch-action: none;
-        }
+        .chart-box { flex: 1; padding: 5px; box-sizing: border-box; min-height: 0; }
+        #delta-area { height: 80px; border-top: 1px solid #444; background: #000; }
+        .draggable-panel { position: absolute; z-index: 5000; background: rgba(0,0,0,0.9); border-radius: 10px; border: 2px solid #555; overflow: hidden; touch-action: none; }
         #offset-panel { top: 10px; left: 10px; padding: 5px; display: grid; grid-template-areas: "hd hd hd" ". up ." "left . right" ". down ."; gap: 5px; }
-        .panel-header { grid-area: hd; background: #444; color: white; font-size: 11px; padding: 12px; text-align: center; cursor: move; font-weight: bold; border-radius: 4px; }
-        .off-btn { width: 44px; height: 44px; background: #333; color: white; border: 1px solid #666; border-radius: 6px; font-size: 20px; display: flex; align-items: center; justify-content: center; }
-
-        /* データダッシュボード */
-        #data-dashboard { top: 10px; right: 10px; min-width: 150px; }
-        #dash-content { padding: 10px; font-family: 'Courier New', monospace; font-size: 13px; pointer-events: none; }
+        .panel-header { grid-area: hd; background: #444; color: white; font-size: 11px; padding: 8px; text-align: center; cursor: move; font-weight: bold; }
+        .off-btn { width: 35px; height: 35px; background: #333; color: white; border: 1px solid #666; border-radius: 6px; font-size: 16px; display: flex; align-items: center; justify-content: center; }
+        #data-dashboard { top: 10px; right: 10px; min-width: 155px; }
+        #dash-content { padding: 8px; font-family: 'Courier New', monospace; font-size: 11px; pointer-events: none; }
         .dash-l1 { color: var(--hrc-red); font-weight: bold; }
         .dash-l2 { color: var(--hrc-blue); font-weight: bold; }
-        .dash-gap { color: #0f0; border-top: 1px solid #333; margin-top: 5px; padding-top: 3px; text-align: right; }
-
-        /* コントロール（最下部に固定） */
-        #controls { 
-            position: fixed; bottom: 0; left: 0; width: 100%;
-            height: 95px; background: #1a1a1a; border-top: 1px solid #333; 
-            padding: 5px 10px; box-sizing: border-box; 
-            display: flex; flex-direction: column; z-index: 9999;
-            touch-action: none !important;
-            overscroll-behavior-x: none !important; /* 横方向の画面スライドを禁止 */
-        }
-        .ctrl-row { display: flex; align-items: center; gap: 8px; flex: 1; overflow: hidden; }
-        .mini-btn { background: #444; color: white; border: none; padding: 0 15px; border-radius: 4px; font-size: 12px; font-weight: bold; height: 40px; }
-        #lap-selector { display: flex; gap: 6px; overflow-x: auto; flex: 1; -webkit-overflow-scrolling: touch; }
-        
-        .lap-btn { min-width: 85px; height: 42px; background: #2a2a2a; color: #ccc; border: 1px solid #555; border-radius: 6px; flex-shrink: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; }
-        .lap-label-idx { font-weight: bold; font-size: 12px; }
-        .lap-label-time { font-size: 11px; }
-        .is-fastest .lap-label-idx { color: #FFA500 !important; }
-        .is-best .lap-label-time { color: #FF0000 !important; font-weight: bold; }
+        .dash-gap { color: #0f0; border-top: 1px solid #333; margin-top: 4px; padding-top: 2px; text-align: right; }
+        .dash-sector { color: #ffff00; border-top: 1px dashed #555; margin-top: 4px; padding-top: 4px; font-size: 10px; }
+        #controls { position: fixed; bottom: 0; left: 0; width: 100%; height: 105px; background: #1a1a1a; border-top: 1px solid #333; padding: 5px; box-sizing: border-box; display: flex; flex-direction: column; z-index: 9999; }
+        .ctrl-row { display: flex; align-items: center; gap: 4px; flex: 1; overflow-x: auto; width: 100%; white-space: nowrap; padding-bottom: 2px; }
+        .mini-btn { background: #444; color: white; border: none; padding: 0 10px; border-radius: 4px; font-size: 10px; font-weight: bold; height: 38px; flex-shrink: 0; }
+        .btn-set { background: #555; color: #fff; min-width: 45px; }
+        .btn-set.active { background: var(--hrc-red); box-shadow: 0 0 5px var(--hrc-red); }
+        #lap-selector { display: flex; gap: 4px; flex-shrink: 0; }
+        .lap-btn { min-width: 75px; height: 38px; background: #2a2a2a; color: #ccc; border: 1px solid #555; border-radius: 4px; flex-shrink: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; }
         .lap-btn.primary { border: 2px solid var(--hrc-red); background: #331111; }
         .lap-btn.secondary { border: 2px solid var(--hrc-blue); background: #111133; }
-        
-        /* シークバー設定 */
-        #seek-bar { 
-            width: 100%; height: 40px; margin: 0; 
-            touch-action: none; accent-color: #ff4444;
-            -webkit-appearance: none; background: transparent;
-        }
+        #seek-bar { width: 100%; height: 40px; margin: 0; accent-color: #ff4444; -webkit-appearance: none; background: transparent; }
         #seek-bar::-webkit-slider-runnable-track { width: 100%; height: 6px; background: #444; border-radius: 3px; }
-        #seek-bar::-webkit-slider-thumb { -webkit-appearance: none; height: 24px; width: 24px; border-radius: 50%; background: var(--hrc-red); margin-top: -9px; }
+        #seek-bar::-webkit-slider-thumb { -webkit-appearance: none; height: 26px; width: 26px; border-radius: 50%; background: var(--hrc-red); margin-top: -10px; border: 2px solid #fff; }
     </style>
 </head>
 <body>
@@ -103,6 +59,7 @@
                 <div id="dash-l1-info" class="dash-l1">L1: ---</div>
                 <div id="dash-l2-info" class="dash-l2">L2: ---</div>
                 <div id="dash-gap-info" class="dash-gap">Gap: 0.000s</div>
+                <div id="dash-sector-info" class="dash-sector">Sector A-B:<br>---</div>
             </div>
         </div>
         <div class="chart-box"><canvas id="telemetryChart"></canvas></div>
@@ -112,10 +69,12 @@
 
 <div id="controls">
     <div class="ctrl-row">
-        <button class="mini-btn" id="playBtn">PLAY</button>
+        <button class="mini-btn" id="playBtn" style="background:var(--hrc-red)">PLAY</button>
         <button class="mini-btn" id="fileBtn">FILE</button>
-        <button class="mini-btn" onclick="location.reload()">RELOAD</button>
+        <button class="mini-btn btn-set" id="btn-setA">SET A</button>
+        <button class="mini-btn btn-set" id="btn-setB">SET B</button>
         <div id="lap-selector"></div>
+        <button class="mini-btn" onclick="location.reload()" style="background:#222">RELOAD</button>
     </div>
     <input type="range" id="seek-bar" value="0" min="0" step="1">
     <input type="file" id="fileInput" accept=".gpx" style="display:none">
@@ -125,13 +84,13 @@
 'use strict';
 let map, marker1, marker2, telChart, deltaChart;
 let lapDataStore = [], sessionMaxSpeed = 0, latOffset = 0, lonOffset = 0, isPlaying = false, currentFrame = 0;
-let primaryIdx = -1, secondaryIdx = -1;
+let primaryIdx = -1, secondaryIdx = -1, distA = null, distB = null;
 
 // Leaflet初期化
 map = L.map('map', { zoomControl: false, maxZoom: 22 }).setView([35.68, 139.76], 15);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 22 }).addTo(map);
-marker1 = L.circleMarker([0,0], {color:'#000', fillColor:'#fff', radius:8, fillOpacity:1, weight:3});
-marker2 = L.circleMarker([0,0], {color:'#000', fillColor:'#33ccff', radius:6, fillOpacity:1, weight:2});
+marker1 = L.circleMarker([0,0], {color:'#fff', fillColor:'#ff4444', radius:8, fillOpacity:1, weight:2});
+marker2 = L.circleMarker([0,0], {color:'#fff', fillColor:'#33ccff', radius:6, fillOpacity:1, weight:2});
 
 // ドラッグ機能
 function makeDraggable(el, handle) {
@@ -161,63 +120,92 @@ function makeDraggable(el, handle) {
 makeDraggable(document.getElementById('offset-panel'), document.getElementById('off-handle'));
 makeDraggable(document.getElementById('data-dashboard'), document.getElementById('dash-handle'));
 
-// マップ位置微調整
+// 再生機能
+const playBtn = document.getElementById('playBtn');
+playBtn.onclick = () => {
+    if (primaryIdx === -1) return;
+    isPlaying = !isPlaying;
+    playBtn.innerText = isPlaying ? "PAUSE" : "PLAY";
+    if (isPlaying) animate();
+};
+
+function animate() {
+    if (!isPlaying) return;
+    const p = lapDataStore[primaryIdx];
+    if (currentFrame >= p.speeds.length - 1) {
+        currentFrame = 0; isPlaying = false; playBtn.innerText = "PLAY";
+    } else {
+        currentFrame++; 
+        document.getElementById('seek-bar').value = currentFrame; 
+        updateFrame(); 
+        requestAnimationFrame(animate);
+    }
+}
+
+// 補正
 const move = (la, lo) => { latOffset += la; lonOffset += lo; drawMapLines(); updateFrame(); };
 document.getElementById('btn-up').onclick = () => move(0.000005, 0);
 document.getElementById('btn-down').onclick = () => move(-0.000005, 0);
 document.getElementById('btn-left').onclick = () => move(0, -0.000005);
 document.getElementById('btn-right').onclick = () => move(0, 0.000005);
 
-const playBtn = document.getElementById('playBtn'), seekBar = document.getElementById('seek-bar');
-document.getElementById('fileBtn').onclick = () => document.getElementById('fileInput').click();
-
-playBtn.onclick = () => { 
-    if (primaryIdx === -1) return; 
-    isPlaying = !isPlaying; 
-    playBtn.innerText = isPlaying ? "PAUSE" : "PLAY"; 
-    if (isPlaying) animate(); 
+// セクター
+document.getElementById('btn-setA').onclick = function() {
+    if (primaryIdx === -1) return;
+    distA = lapDataStore[primaryIdx].dists[currentFrame];
+    document.querySelectorAll('.btn-set').forEach(b => b.classList.remove('active'));
+    this.classList.add('active');
+    calculateSectors();
+};
+document.getElementById('btn-setB').onclick = function() {
+    if (primaryIdx === -1) return;
+    distB = lapDataStore[primaryIdx].dists[currentFrame];
+    this.classList.add('active');
+    calculateSectors();
 };
 
-function animate() {
-    if (!isPlaying) return;
-    const p = lapDataStore[primaryIdx];
-    if (currentFrame >= p.speeds.length - 1) { 
-        currentFrame = 0; isPlaying = false; playBtn.innerText = "PLAY"; 
-    } else { 
-        currentFrame++; seekBar.value = currentFrame; updateFrame(); requestAnimationFrame(animate); 
+function calculateSectors() {
+    if (distA === null || distB === null) return;
+    const getT = (lap) => {
+        const d1 = Math.min(distA, distB), d2 = Math.max(distA, distB);
+        const i1 = lap.dists.findIndex(d => d >= d1), i2 = lap.dists.findIndex(d => d >= d2);
+        return lap.times[i2] - lap.times[i1];
+    };
+    const t1 = getT(lapDataStore[primaryIdx]);
+    let html = `L1: ${t1.toFixed(3)}s`;
+    if (secondaryIdx !== -1) {
+        const t2 = getT(lapDataStore[secondaryIdx]);
+        const diff = t1 - t2;
+        html += `<br>L2: ${t2.toFixed(3)}s (${diff > 0 ? '+' : ''}${diff.toFixed(3)}s)`;
     }
+    document.getElementById('dash-sector-info').innerHTML = `Sector A-B:<br>${html}`;
 }
 
-seekBar.oninput = () => { currentFrame = parseInt(seekBar.value); updateFrame(); };
-seekBar.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
+const seekBar = document.getElementById('seek-bar');
+document.getElementById('fileBtn').onclick = () => document.getElementById('fileInput').click();
+seekBar.oninput = () => { currentFrame = parseInt(seekBar.value); isPlaying = false; playBtn.innerText = "PLAY"; updateFrame(); };
 
 function updateFrame() {
     if (primaryIdx === -1 || !lapDataStore[primaryIdx]) return;
     const p = lapDataStore[primaryIdx], s = secondaryIdx >= 0 ? lapDataStore[secondaryIdx] : null;
     const idx = Math.min(currentFrame, p.speeds.length - 1);
-    
-    // マーカー移動
     marker1.setLatLng([p.coords[idx][0] + latOffset, p.coords[idx][1] + lonOffset]).addTo(map);
     let sIdx = 0;
     if (s) { 
         sIdx = findIndexByDistance(s, p.dists[idx]); 
         marker2.setLatLng([s.coords[sIdx][0] + latOffset, s.coords[sIdx][1] + lonOffset]).addTo(map); 
     }
-
-    // 数値表示更新
     document.getElementById('dash-time').innerText = `Time: ${p.times[idx].toFixed(2)}s`;
     document.getElementById('dash-l1-info').innerText = `L1: ${p.speeds[idx]}km/h / ${p.rpms[idx]}r`;
     if (s) {
         document.getElementById('dash-l2-info').innerText = `L2: ${s.speeds[sIdx]}km/h / ${s.rpms[sIdx]}r`;
         document.getElementById('dash-gap-info').innerText = `Gap: ${(s.times[sIdx] - p.times[idx]).toFixed(3)}s`;
-        document.getElementById('dash-l2-info').style.display = 'block'; 
+        document.getElementById('dash-l2-info').style.display = 'block';
         document.getElementById('dash-gap-info').style.display = 'block';
     } else {
-        document.getElementById('dash-l2-info').style.display = 'none'; 
+        document.getElementById('dash-l2-info').style.display = 'none';
         document.getElementById('dash-gap-info').style.display = 'none';
     }
-
-    // グラフ縦線同期
     [telChart, deltaChart].forEach(chart => {
         if (chart && chart.options.plugins.annotation) {
             chart.options.plugins.annotation.annotations.line1.xMin = idx;
@@ -260,17 +248,11 @@ function parseGPX(xml) {
         lapDataStore.push({ speeds, rpms, coords, times, dists, duration: times[times.length-1], lapMaxV });
     }
     if (lapDataStore.length === 0) return;
-    const bestIdx = lapDataStore.reduce((p, c, i, a) => c.duration < a[p].duration ? i : p, 0);
-    const fastIdx = lapDataStore.reduce((p, c, i, a) => c.lapMaxV > a[p].lapMaxV ? i : p, 0);
-    sessionMaxSpeed = lapDataStore[fastIdx].lapMaxV;
-
     lapDataStore.forEach((lap, i) => {
         const btn = document.createElement('button'); btn.className = 'lap-btn';
-        if (i === bestIdx) btn.classList.add('is-best');
-        if (i === fastIdx) btn.classList.add('is-fastest');
         btn.innerHTML = `<span class="lap-label-idx">L${i+1}</span><span class="lap-label-time">${lap.duration.toFixed(3)}s</span>`;
         btn.onclick = () => { 
-            if (primaryIdx === -1 || (primaryIdx !== -1 && secondaryIdx !== -1)) { primaryIdx = i; secondaryIdx = -1; } 
+            if (primaryIdx === -1 || (primaryIdx !== -1 && secondaryIdx !== -1)) { primaryIdx = i; secondaryIdx = -1; distA = distB = null; } 
             else if (i !== primaryIdx) { secondaryIdx = i; } 
             currentFrame = 0; updateUI(); 
         };
@@ -286,7 +268,7 @@ function updateUI() {
     });
     if (primaryIdx !== -1) { 
         seekBar.max = lapDataStore[primaryIdx].speeds.length - 1; 
-        drawMapLines(); createCharts(); updateFrame(); 
+        drawMapLines(); createCharts(); updateFrame(); calculateSectors();
     }
 }
 
@@ -295,8 +277,9 @@ function drawMapLines() {
     if (window.p1) map.removeLayer(window.p1); if (window.p2) map.removeLayer(window.p2);
     const dl = (pts, spds, sec) => {
         const g = L.featureGroup();
+        const maxV = Math.max(...spds, 100);
         for (let i = 0; i < pts.length - 1; i++) {
-            const c = `hsl(${(1 - Math.min(spds[i]/sessionMaxSpeed, 1)) * 240}, 100%, 50%)`;
+            const c = `hsl(${(1 - Math.min(spds[i]/maxV, 1)) * 240}, 100%, 50%)`;
             L.polyline([[pts[i][0]+latOffset, pts[i][1]+lonOffset], [pts[i+1][0]+latOffset, pts[i+1][1]+lonOffset]], {color:c, weight:sec?2:5, opacity:sec?0.3:1}).addTo(g);
         }
         return g;
@@ -309,86 +292,25 @@ function createCharts() {
     const ctx1 = document.getElementById('telemetryChart').getContext('2d');
     const ctx2 = document.getElementById('deltaChart').getContext('2d');
     const p = lapDataStore[primaryIdx], s = secondaryIdx >= 0 ? lapDataStore[secondaryIdx] : null;
-
-    const ds = [
-        { label: 'Speed (L1)', data: p.speeds, borderColor: '#ff4444', borderWidth: 2, pointRadius: 0, yAxisID: 'y' },
-        { label: 'RPM (L1)', data: p.rpms, borderColor: '#ffff00', borderWidth: 1, pointRadius: 0, yAxisID: 'yRPM' }
-    ];
-
-    if (s) {
-        ds.push({ 
-            label: 'Speed (L2)', data: p.dists.map(d => s.speeds[findIndexByDistance(s, d)]), 
-            borderColor: '#33ccff', borderWidth: 1, borderDash: [5,5], pointRadius: 0, yAxisID: 'y' 
-        });
-        ds.push({ 
-            label: 'RPM (L2)', data: p.dists.map(d => s.rpms[findIndexByDistance(s, d)]), 
-            borderColor: '#00ffff', borderWidth: 1, borderDash: [2,2], pointRadius: 0, yAxisID: 'yRPM' 
-        });
-    }
-
-    const commonAnnotation = {
-        annotations: {
-            line1: { type: 'line', xMin: 0, xMax: 0, borderColor: 'rgba(255, 255, 255, 0.7)', borderWidth: 1 }
-        }
-    };
-
+    const ds = [{ label: 'Speed (L1)', data: p.speeds, borderColor: '#ff4444', borderWidth: 2, pointRadius: 0, yAxisID: 'y' },
+                { label: 'RPM (L1)', data: p.rpms, borderColor: '#ffff00', borderWidth: 1, pointRadius: 0, yAxisID: 'yRPM' }];
+    if (s) ds.push({ label: 'Speed (L2)', data: p.dists.map(d => s.speeds[findIndexByDistance(s, d)]), borderColor: '#33ccff', borderWidth: 1, borderDash: [5,5], pointRadius: 0, yAxisID: 'y' });
     if (telChart) telChart.destroy();
     telChart = new Chart(ctx1, {
-        type: 'line',
-        data: { labels: p.times.map(t => t.toFixed(2)), datasets: ds },
-        options: {
-            responsive: true, maintainAspectRatio: false, animation: false,
-            plugins: { legend: { display: false }, annotation: commonAnnotation },
-            scales: {
-                x: { display: false },
-                y: { min: 0, position: 'left', title: { display: true, text: 'km/h', color: '#ff4444' }, ticks: { color: '#ff4444' } },
-                yRPM: { min: 0, position: 'right', grid: { drawOnChartArea: false }, title: { display: true, text: 'RPM', color: '#ffff00' }, ticks: { color: '#ffff00' } }
-            }
-        }
+        type: 'line', data: { labels: p.times.map(t => t.toFixed(2)), datasets: ds },
+        options: { responsive: true, maintainAspectRatio: false, animation: false, plugins: { legend: { display: false }, annotation: { annotations: { line1: { type: 'line', xMin: 0, xMax: 0, borderColor: '#fff', borderWidth: 1 } } } },
+            scales: { x: { display: false }, y: { min: 0, ticks: { color: '#ff4444' } }, yRPM: { min: 0, position: 'right', grid: { drawOnChartArea: false }, ticks: { color: '#ffff00' } } } }
     });
-
     if (deltaChart) deltaChart.destroy();
     if (s) {
         const dd = p.dists.map((d, i) => s.times[findIndexByDistance(s, d)] - p.times[i]);
         deltaChart = new Chart(ctx2, {
-            type: 'line',
-            data: { labels: p.times.map(t => t.toFixed(2)), datasets: [{ data: dd, borderColor: '#0f0', fill: true, backgroundColor: 'rgba(0,255,0,0.1)', pointRadius: 0 }] },
-            options: {
-                responsive: true, maintainAspectRatio: false, animation: false,
-                plugins: { legend: { display: false }, annotation: commonAnnotation },
-                scales: { x: { display: false }, y: { ticks: { color: '#0f0' }, grid: { color: '#333' } } }
-            }
+            type: 'line', data: { labels: p.times.map(t => t.toFixed(2)), datasets: [{ data: dd, borderColor: '#0f0', fill: true, backgroundColor: 'rgba(0,255,0,0.1)', pointRadius: 0 }] },
+            options: { responsive: true, maintainAspectRatio: false, animation: false, plugins: { legend: { display: false }, annotation: { annotations: { line1: { type: 'line', xMin: 0, xMax: 0, borderColor: '#fff', borderWidth: 1 } } } },
+                scales: { x: { display: false }, y: { ticks: { color: '#0f0' }, grid: { color: '#333' } } } }
         });
     }
 }
-
-(function() {
-    // 画面全体のスクロールを強制停止
-   window.addEventListener('touchmove', function(e) {
-    // 全体の動きを止める
-    if (e.cancelable) e.preventDefault();
-}, { passive: false });
-
-// シークバー操作中に他の画面へ行かないようにガードを固める
-seekBar.addEventListener('touchmove', function(e) {
-    // 親要素やブラウザに「スライドした」という情報を伝えない
-    e.stopPropagation();
-}, { passive: false });
-
-    // シークバー自体のイベントを最優先にする
-    const sb = document.getElementById('seek-bar');
-    sb.addEventListener('touchmove', function(e) {
-        e.stopPropagation(); // 親要素にイベントを渡さない
-    }, { passive: false });
-
-    // グラフエリアも念のためガード
-    document.getElementById('chart-area').addEventListener('touchmove', function(e) {
-        e.preventDefault();
-    }, { passive: false });
-})();
 </script>
 </body>
 </html>
-
-
-
