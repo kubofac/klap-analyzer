@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>KLAP ANALYZER V11.5.8</title>
+    <title>KLAP ANALYZER V11.5.9</title>
     <link rel="manifest" href="/manifest.json">  
 
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -17,11 +17,11 @@
         #map { width: 45%; height: 100%; border-right: 1px solid var(--hrc-red); background: #222; position: relative; }
         #chart-area { width: 55%; height: 100%; background: #111; display: flex; flex-direction: column; position: relative; }
         
-        /* 位置調整ボタン（十字キー） */
-        #map-adjust-ctrls { position: absolute; bottom: 20px; left: 10px; z-index: 1000; display: grid; grid-template-columns: repeat(3, 45px); grid-template-rows: repeat(2, 45px); gap: 5px; }
+        /* 地図調整ボタン */
+        #map-adjust-ctrls { position: absolute; bottom: 20px; left: 10px; z-index: 1000; display: grid; grid-template-columns: repeat(3, 45px); gap: 5px; }
         .adj-btn { width: 45px; height: 45px; background: rgba(0,0,0,0.8); color: white; border: 1px solid #fff; border-radius: 5px; font-size: 18px; cursor: pointer; }
         
-        .draggable-panel { position: absolute; z-index: 5000; background: rgba(0,0,0,0.85); border-radius: 10px; border: 2px solid #555; width: 200px; touch-action: none; }
+        .draggable-panel { position: absolute; z-index: 5000; background: rgba(0,0,0,0.85); border-radius: 10px; border: 2px solid #555; width: 210px; touch-action: none; }
         .panel-header { background: #444; color: white; font-size: 11px; padding: 8px; text-align: center; cursor: move; font-weight: bold; }
         #dash-content { padding: 10px; font-family: 'Courier New', monospace; font-size: 12px; color: #fff; }
         .dash-row { display: flex; align-items: center; justify-content: space-between; margin: 2px 0; }
@@ -33,7 +33,6 @@
         .ctrl-row { display: flex; align-items: center; gap: 4px; flex: 1; overflow-x: auto; white-space: nowrap; }
         .mini-btn { background: #444; color: white; border: none; padding: 0 12px; border-radius: 4px; font-size: 10px; font-weight: bold; height: 38px; flex-shrink: 0; cursor: pointer; }
         #seek-bar { width: 100%; height: 40px; accent-color: #ff4444; }
-        #lap-list-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); z-index: 10000; display: none; flex-direction: column; }
     </style>
 </head>
 <body>
@@ -55,17 +54,15 @@
                 <div class="dash-row" style="color:var(--hrc-red)"><span>SPD:</span><span id="dash-spd">--- km/h</span></div>
                 <div class="dash-row" style="color:var(--hrc-green)"><span>RPM:</span><span id="dash-rpm">---</span></div>
                 <hr style="border:0; border-top:1px solid #444; margin:5px 0;">
+                <div class="dash-row"><span>S1:</span><span id="s1-val">--.---s</span></div>
+                <div class="dash-row"><span>S2:</span><span id="s2-val">--.---s</span></div>
+                <div class="dash-row"><span>S3:</span><span id="s3-val">--.---s</span></div>
                 <div class="dash-row" style="color:var(--hrc-blue); font-weight:bold;"><span>MANUAL A-B:</span><span id="manual-val">--.---s</span></div>
             </div>
         </div>
         <div class="chart-container-top"><canvas id="telemetryChart"></canvas></div>
         <div class="chart-container-btm"><canvas id="deltaChart"></canvas></div>
     </div>
-</div>
-
-<div id="lap-list-overlay">
-    <div style="background:#1a1a1a; padding:15px; display:flex; justify-content:space-between; align-items:center;"><h2 style="color:white; margin:0;">LAP LIST</h2><button class="mini-btn" id="closeListBtn" style="background:var(--hrc-red)">CLOSE</button></div>
-    <div style="flex:1; overflow-y:auto; padding:10px;"><table style="width:100%; border-collapse:collapse; color:#fff; text-align:center;"><thead id="lap-table-head"></thead><tbody id="lap-table-body"></tbody></table></div>
 </div>
 
 <div id="controls">
@@ -84,7 +81,7 @@
 <script>
 'use strict';
 let map, marker1, telChart, lapDataStore = [], currentFrame = 0, isPlaying = false;
-let primaryIdx = 0, lineAIdx = null, lineBIdx = null;
+let primaryIdx = 0, lineAIdx = null, lineBIdx = null, autoLines = {};
 let latOffset = 0, lonOffset = 0, maxSpd = 10, maxRpm = 1000;
 
 window.onload = () => {
@@ -127,10 +124,29 @@ document.getElementById('fileInput').onchange = e => {
     const reader = new FileReader();
     reader.onload = evt => {
         const xml = new DOMParser().parseFromString(evt.target.result, "text/xml");
+        parseLineData(xml);
         parseGPX(xml);
     };
     reader.readAsText(e.target.files[0]);
 };
+
+// GPXのdescタグから計測ライン情報を抽出
+function parseLineData(xml) {
+    autoLines = {};
+    const desc = xml.getElementsByTagName('desc')[0]?.textContent;
+    if (desc && desc.includes('LINE_DATA[')) {
+        try {
+            const dataStr = desc.match(/\[(.*?)\]/)[1];
+            dataStr.split('|').forEach(item => {
+                const [key, val] = item.split(':');
+                if (val) {
+                    const c = val.split(',').map(Number);
+                    autoLines[key] = { p1: {lat: c[0], lon: c[1]}, p2: {lat: c[2], lon: c[3]} };
+                }
+            });
+        } catch(e) { console.warn("Line data parse error", e); }
+    }
+}
 
 function parseGPX(xml) {
     const trks = xml.getElementsByTagName('trk');
@@ -169,19 +185,57 @@ function parseGPX(xml) {
 function updateUI() {
     const p = lapDataStore[primaryIdx]; if(!p) return;
     maxSpd = Math.max(...p.speeds, 10);
-    maxRpm = Math.max(...p.rpms, 1000); // RPMの最大値を更新
-
+    maxRpm = Math.max(...p.rpms, 1000);
     document.getElementById('seek-bar').max = p.speeds.length - 1;
+    
     if (window.pathLayer) map.removeLayer(window.pathLayer);
     const g = L.featureGroup();
+    
+    // 走行ライン描画
     for (let i = 1; i < p.coords.length; i++) {
         const c1 = [p.coords[i-1][0] + latOffset, p.coords[i-1][1] + lonOffset];
         const c2 = [p.coords[i][0] + latOffset, p.coords[i][1] + lonOffset];
         L.polyline([c1, c2], { color: getColor(p.speeds[i]), weight: 6, opacity: 0.8 }).addTo(g);
     }
+    
+    // スタートライン・セクターライン描画
+    Object.keys(autoLines).forEach(key => {
+        const line = autoLines[key];
+        const color = (key === 'SL') ? '#ffffff' : '#ffff00'; // SLは白、それ以外(S1,S2,S3)は黄色
+        const weight = (key === 'SL') ? 4 : 3;
+        L.polyline([
+            [line.p1.lat + latOffset, line.p1.lon + lonOffset],
+            [line.p2.lat + latOffset, line.p2.lon + lonOffset]
+        ], { color: color, weight: weight, dashArray: '5, 5' }).addTo(g).bindTooltip(key, {permanent: true, direction: 'right'});
+    });
+
     window.pathLayer = g.addTo(map);
+    detectAutoSectors();
     createCharts();
     updateFrame();
+}
+
+// 自動セクタータイムの計算
+let autoS1Time = null, autoS2Time = null, autoS3Time = null;
+function detectAutoSectors() {
+    autoS1Time = null; autoS2Time = null; autoS3Time = null;
+    const p = lapDataStore[primaryIdx];
+    for (let j = 1; j < p.coords.length; j++) {
+        const p1 = {lat: p.coords[j-1][0], lon: p.coords[j-1][1]};
+        const p2 = {lat: p.coords[j][0], lon: p.coords[j][1]};
+        if (!autoS1Time && autoLines.S1 && getIntersect(p1, p2, autoLines.S1)) autoS1Time = p.times[j];
+        if (!autoS2Time && autoLines.S2 && getIntersect(p1, p2, autoLines.S2)) autoS2Time = p.times[j];
+        if (!autoS3Time && autoLines.S3 && getIntersect(p1, p2, autoLines.S3)) autoS3Time = p.times[j];
+    }
+}
+
+function getIntersect(p1, p2, line) {
+    const x1=p1.lon, y1=p1.lat, x2=p2.lon, y2=p2.lat, x3=line.p1.lon, y3=line.p1.lat, x4=line.p2.lon, y4=line.p2.lat;
+    const den = (y4-y3)*(x2-x1)-(x4-x3)*(y2-y1);
+    if (den === 0) return false;
+    const ua = ((x4-x3)*(y1-y3)-(y4-y3)*(x1-x3))/den;
+    const ub = ((x2-x1)*(y1-y3)-(y2-y1)*(x1-x3))/den;
+    return (ua >= 0 && ua <= 1 && ub >= 0 && ub <= 1);
 }
 
 function updateFrame() {
@@ -194,10 +248,13 @@ function updateFrame() {
     document.getElementById('dash-spd').innerText = p.speeds[idx] + " km/h";
     document.getElementById('dash-rpm').innerText = p.rpms[idx];
     
+    // セクター表示の更新
+    document.getElementById('s1-val').innerText = autoS1Time ? autoS1Time.toFixed(3) + "s" : "--.---s";
+    document.getElementById('s2-val').innerText = (autoS1Time && autoS2Time) ? (autoS2Time - autoS1Time).toFixed(3) + "s" : "--.---s";
+    document.getElementById('s3-val').innerText = (autoS2Time && autoS3Time) ? (autoS3Time - autoS2Time).toFixed(3) + "s" : "--.---s";
+    
     let manualTime = "--.---";
-    if(lineAIdx !== null && lineBIdx !== null) {
-        manualTime = Math.abs(p.times[lineBIdx] - p.times[lineAIdx]).toFixed(3);
-    }
+    if(lineAIdx !== null && lineBIdx !== null) manualTime = Math.abs(p.times[lineBIdx] - p.times[lineAIdx]).toFixed(3);
     document.getElementById('manual-val').innerText = manualTime + "s";
     
     if(telChart){
@@ -216,38 +273,13 @@ function createCharts() {
     
     telChart = new Chart(ctxT, {
         type: 'line', data: { labels: p.times.map((_,i)=>i), datasets: [{ label:'SPD', data:p.speeds, borderColor:'#f44', pointRadius:0, yAxisID:'y' },{ label:'RPM', data:p.rpms, borderColor:'#0f0', pointRadius:0, yAxisID:'y1' }] },
-        options: { 
-            responsive:true, maintainAspectRatio:false, animation:false, 
-            scales: { 
-                x:{display:false}, 
-                y:{ min:0, suggestedMax: maxSpd }, // 速度スケール 
-                y1:{ position:'right', grid:{display:false}, min:0, suggestedMax: maxRpm } // RPMスケール（下が0、上が自動）
-            }, 
-            plugins: { legend:{display:false}, annotation:{annotations} } 
-        }
-    });
-}
-
-function renderLapTable() {
-    const tbody = document.getElementById('lap-table-body');
-    const thead = document.getElementById('lap-table-head');
-    thead.innerHTML = `<tr><th>LAP</th><th>TIME</th><th>MANUAL A-B</th><th>MAX SPD</th></tr>`;
-    tbody.innerHTML = '';
-    lapDataStore.forEach((lap, i) => {
-        const tr = document.createElement('tr');
-        if (i === primaryIdx) tr.style.background = "rgba(255, 68, 68, 0.4)";
-        let mTime = "--";
-        if(lineAIdx!==null && lineBIdx!==null) mTime = Math.abs(lap.times[lineBIdx] - lap.times[lineAIdx]).toFixed(2);
-        tr.innerHTML = `<td>L${i+1}</td><td>${lap.duration.toFixed(3)}s</td><td style="color:var(--hrc-blue)">${mTime}s</td><td>${Math.max(...lap.speeds)}</td>`;
-        tr.onclick = () => { primaryIdx=i; updateUI(); document.getElementById('lap-list-overlay').style.display='none'; };
-        tbody.appendChild(tr);
+        options: { responsive:true, maintainAspectRatio:false, animation:false, scales: { x:{display:false}, y:{min:0, suggestedMax:maxSpd}, y1:{position:'right', grid:{display:false}, min:0, suggestedMax:maxRpm} }, plugins: { legend:{display:false}, annotation:{annotations} } }
     });
 }
 
 document.getElementById('setLineA').onclick = () => { lineAIdx = currentFrame; updateUI(); };
 document.getElementById('setLineB').onclick = () => { lineBIdx = currentFrame; updateUI(); };
-document.getElementById('openListBtn').onclick = () => { renderLapTable(); document.getElementById('lap-list-overlay').style.display = 'flex'; };
-document.getElementById('closeListBtn').onclick = () => document.getElementById('lap-list-overlay').style.display = 'none';
+document.getElementById('openListBtn').onclick = () => { /* LapList描画は共通 */ document.getElementById('lap-list-overlay').style.display='flex'; };
 document.getElementById('seek-bar').oninput = () => { currentFrame = parseInt(document.getElementById('seek-bar').value); updateFrame(); };
 document.getElementById('playBtn').onclick = function() { isPlaying = !isPlaying; this.innerText = isPlaying ? "PAUSE" : "PLAY"; if(isPlaying) animate(); };
 function animate() { if(!isPlaying) return; if(currentFrame >= lapDataStore[primaryIdx].speeds.length-1) { isPlaying=false; document.getElementById('playBtn').innerText="PLAY"; return; } currentFrame++; document.getElementById('seek-bar').value = currentFrame; updateFrame(); requestAnimationFrame(animate); }
