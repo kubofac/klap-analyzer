@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>KLAP ANALYZER V11.5.7</title>
+    <title>KLAP ANALYZER V11.5.8</title>
     <link rel="manifest" href="/manifest.json">  
 
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -25,6 +25,9 @@
         .panel-header { background: #444; color: white; font-size: 11px; padding: 8px; text-align: center; cursor: move; font-weight: bold; }
         #dash-content { padding: 10px; font-family: 'Courier New', monospace; font-size: 12px; color: #fff; }
         .dash-row { display: flex; align-items: center; justify-content: space-between; margin: 2px 0; }
+
+        .chart-container-top { flex: 4; position: relative; padding: 5px; min-height: 0; }
+        .chart-container-btm { flex: 1; position: relative; border-top: 1px solid #444; background: #000; padding: 5px; min-height: 0; }
 
         #controls { position: fixed; bottom: 0; left: 0; width: 100%; height: 105px; background: #111; padding: 5px; display: flex; flex-direction: column; z-index: 9999; }
         .ctrl-row { display: flex; align-items: center; gap: 4px; flex: 1; overflow-x: auto; white-space: nowrap; }
@@ -52,8 +55,6 @@
                 <div class="dash-row" style="color:var(--hrc-red)"><span>SPD:</span><span id="dash-spd">--- km/h</span></div>
                 <div class="dash-row" style="color:var(--hrc-green)"><span>RPM:</span><span id="dash-rpm">---</span></div>
                 <hr style="border:0; border-top:1px solid #444; margin:5px 0;">
-                <div class="dash-row"><span>S1:</span><span id="s1-val">--.---s</span></div>
-                <div class="dash-row"><span>S2:</span><span id="s2-val">--.---s</span></div>
                 <div class="dash-row" style="color:var(--hrc-blue); font-weight:bold;"><span>MANUAL A-B:</span><span id="manual-val">--.---s</span></div>
             </div>
         </div>
@@ -83,8 +84,8 @@
 <script>
 'use strict';
 let map, marker1, telChart, lapDataStore = [], currentFrame = 0, isPlaying = false;
-let primaryIdx = 0, s1Idx = null, s2Idx = null, lineAIdx = null, lineBIdx = null, autoLines = {};
-let latOffset = 0, lonOffset = 0, maxSpd = 10;
+let primaryIdx = 0, lineAIdx = null, lineBIdx = null;
+let latOffset = 0, lonOffset = 0, maxSpd = 10, maxRpm = 1000;
 
 window.onload = () => {
     map = L.map('map', { zoomControl: false, maxZoom: 22 }).setView([35.68, 139.76], 15);
@@ -95,7 +96,7 @@ window.onload = () => {
 
 function adjustMap(dLat, dLon) {
     latOffset += dLat; lonOffset += dLon;
-    updateUI(); // ラインを再描画
+    updateUI();
 }
 
 function initDraggable(el, handle) {
@@ -144,7 +145,10 @@ function parseGPX(xml) {
             const lat = parseFloat(pts[j].getAttribute('lat')), lon = parseFloat(pts[j].getAttribute('lon'));
             let rpmValue = 0;
             const ext = pts[j].getElementsByTagName('extensions')[0];
-            if(ext) { const rpmTag = ext.getElementsByTagName('rpm')[0]; if(rpmTag) rpmValue = parseInt(rpmTag.textContent) || 0; }
+            if(ext) { 
+                const rpmTag = ext.getElementsByTagName('rpm')[0] || ext.getElementsByTagName('ns3:rpm')[0]; 
+                if(rpmTag) rpmValue = parseInt(rpmTag.textContent) || 0; 
+            }
             const time = (new Date(pts[j].getElementsByTagName('time')[0].textContent) - startT) / 1000;
             if (j > 0) dAcc += L.latLng(crds[j-1]).distanceTo([lat, lon]);
             crds.push([lat, lon]); spds.push(0); tms.push(time); rpms.push(rpmValue); dsts.push(dAcc); 
@@ -165,6 +169,8 @@ function parseGPX(xml) {
 function updateUI() {
     const p = lapDataStore[primaryIdx]; if(!p) return;
     maxSpd = Math.max(...p.speeds, 10);
+    maxRpm = Math.max(...p.rpms, 1000); // RPMの最大値を更新
+
     document.getElementById('seek-bar').max = p.speeds.length - 1;
     if (window.pathLayer) map.removeLayer(window.pathLayer);
     const g = L.featureGroup();
@@ -210,7 +216,15 @@ function createCharts() {
     
     telChart = new Chart(ctxT, {
         type: 'line', data: { labels: p.times.map((_,i)=>i), datasets: [{ label:'SPD', data:p.speeds, borderColor:'#f44', pointRadius:0, yAxisID:'y' },{ label:'RPM', data:p.rpms, borderColor:'#0f0', pointRadius:0, yAxisID:'y1' }] },
-        options: { responsive:true, maintainAspectRatio:false, animation:false, scales: { x:{display:false}, y1:{position:'right', grid:{display:false}} }, plugins: { legend:{display:false}, annotation:{annotations} } }
+        options: { 
+            responsive:true, maintainAspectRatio:false, animation:false, 
+            scales: { 
+                x:{display:false}, 
+                y:{ min:0, suggestedMax: maxSpd }, // 速度スケール 
+                y1:{ position:'right', grid:{display:false}, min:0, suggestedMax: maxRpm } // RPMスケール（下が0、上が自動）
+            }, 
+            plugins: { legend:{display:false}, annotation:{annotations} } 
+        }
     });
 }
 
