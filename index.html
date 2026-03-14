@@ -3,36 +3,46 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>KLAP ANALYZER V11.5.9</title>
-    <link rel="manifest" href="/manifest.json">  
+    <title>KLAP ANALYZER V11.6.2</title>
 
+     <link rel="manifest" href="/manifest.json">  
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1"></script>
     <style>
-        :root { --hrc-red: #ff4444; --hrc-blue: #33ccff; --hrc-green: #00ff00; --bg-dark: #0a0a0a; --sec-yellow: #ffff00; }
-        html, body { overflow: hidden; position: fixed; width: 100%; height: 100%; background: #000; margin: 0; padding: 0; font-family: sans-serif; }
+        :root { --hrc-red: #ff4444; --hrc-blue: #33ccff; --hrc-green: #00ff00; --bg-dark: #0a0a0a; --hrc-orange: #ff9900; }
+        html, body { overflow: hidden; width: 100%; height: 100%; background: #000; margin: 0; padding: 0; font-family: sans-serif; color: #fff; }
         #main-container { display: flex; height: calc(100vh - 105px); width: 100%; }
         #map { width: 45%; height: 100%; border-right: 1px solid var(--hrc-red); background: #222; position: relative; }
         #chart-area { width: 55%; height: 100%; background: #111; display: flex; flex-direction: column; position: relative; }
         
-        /* 地図調整ボタン */
-        #map-adjust-ctrls { position: absolute; bottom: 20px; left: 10px; z-index: 1000; display: grid; grid-template-columns: repeat(3, 45px); gap: 5px; }
-        .adj-btn { width: 45px; height: 45px; background: rgba(0,0,0,0.8); color: white; border: 1px solid #fff; border-radius: 5px; font-size: 18px; cursor: pointer; }
-        
-        .draggable-panel { position: absolute; z-index: 5000; background: rgba(0,0,0,0.85); border-radius: 10px; border: 2px solid #555; width: 210px; touch-action: none; }
-        .panel-header { background: #444; color: white; font-size: 11px; padding: 8px; text-align: center; cursor: move; font-weight: bold; }
-        #dash-content { padding: 10px; font-family: 'Courier New', monospace; font-size: 12px; color: #fff; }
-        .dash-row { display: flex; align-items: center; justify-content: space-between; margin: 2px 0; }
+        /* 地図調整コントロール */
+        #map-adjust-ctrls { position: absolute; bottom: 20px; left: 10px; z-index: 1000; display: grid; grid-template-columns: repeat(3, 40px); gap: 5px; }
+        .adj-btn { width: 40px; height: 40px; background: rgba(0,0,0,0.8); color: white; border: 1px solid #fff; border-radius: 5px; cursor: pointer; font-weight: bold; }
 
+        /* ラップリスト */
+        #lap-list-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); z-index: 10000; flex-direction: column; padding: 20px; box-sizing: border-box; }
+        #lap-list-content { overflow-y: auto; margin-top: 15px; font-family: monospace; }
+        .lap-row-item { display: flex; justify-content: space-between; padding: 12px 5px; border-bottom: 1px solid #333; cursor: pointer; font-size: 14px; text-align: center; }
+        .lap-row-item span { flex: 1; }
+        .lap-row-item:hover { background: #222; }
+
+        /* ダッシュボード */
+        .draggable-panel { position: absolute; z-index: 5000; background: rgba(0,0,0,0.85); border-radius: 10px; border: 2px solid #555; width: 210px; }
+        .panel-header { background: #444; color: white; font-size: 11px; padding: 8px; text-align: center; cursor: move; font-weight: bold; }
+        #dash-content { padding: 10px; font-family: monospace; font-size: 12px; }
+        .dash-row { display: flex; justify-content: space-between; margin: 2px 0; }
+        
         .chart-container-top { flex: 4; position: relative; padding: 5px; min-height: 0; }
         .chart-container-btm { flex: 1; position: relative; border-top: 1px solid #444; background: #000; padding: 5px; min-height: 0; }
-
-        #controls { position: fixed; bottom: 0; left: 0; width: 100%; height: 105px; background: #111; padding: 5px; display: flex; flex-direction: column; z-index: 9999; }
-        .ctrl-row { display: flex; align-items: center; gap: 4px; flex: 1; overflow-x: auto; white-space: nowrap; }
-        .mini-btn { background: #444; color: white; border: none; padding: 0 12px; border-radius: 4px; font-size: 10px; font-weight: bold; height: 38px; flex-shrink: 0; cursor: pointer; }
+        
+        #controls { position: fixed; bottom: 0; left: 0; width: 100%; height: 105px; background: #111; padding: 5px; display: flex; flex-direction: column; z-index: 999; }
+        .ctrl-row { display: flex; align-items: center; gap: 4px; height: 45px; overflow-x: auto; }
+        .mini-btn { background: #444; color: white; border: none; padding: 0 15px; border-radius: 4px; font-size: 11px; height: 35px; flex-shrink: 0; cursor: pointer; font-weight: bold; }
         #seek-bar { width: 100%; height: 40px; accent-color: #ff4444; }
+        
+        .line-label { background: rgba(0,0,0,0.7); color: #fff; border: 1px solid #fff; padding: 2px 4px; border-radius: 3px; font-size: 10px; }
     </style>
 </head>
 <body>
@@ -57,7 +67,8 @@
                 <div class="dash-row"><span>S1:</span><span id="s1-val">--.---s</span></div>
                 <div class="dash-row"><span>S2:</span><span id="s2-val">--.---s</span></div>
                 <div class="dash-row"><span>S3:</span><span id="s3-val">--.---s</span></div>
-                <div class="dash-row" style="color:var(--hrc-blue); font-weight:bold;"><span>MANUAL A-B:</span><span id="manual-val">--.---s</span></div>
+                <div class="dash-row" style="color:var(--hrc-orange)"><span>S4(Final):</span><span id="s4-val">--.---s</span></div>
+                <div class="dash-row" style="color:var(--hrc-blue)"><span>MANUAL A-B:</span><span id="manual-val">--.---s</span></div>
             </div>
         </div>
         <div class="chart-container-top"><canvas id="telemetryChart"></canvas></div>
@@ -70,12 +81,17 @@
         <button class="mini-btn" id="playBtn" style="background:var(--hrc-red)">PLAY</button>
         <button class="mini-btn" id="fileBtn">FILE OPEN</button>
         <button class="mini-btn" id="openListBtn" style="background:var(--hrc-blue)">LAP LIST</button>
-        <button class="mini-btn" id="setLineA" style="background:#fff; color:#000">SET LINE A</button>
-        <button class="mini-btn" id="setLineB" style="background:#fff; color:#000">SET LINE B</button>
+        <button class="mini-btn" id="setLineA" style="background:#fff; color:#000">SET A</button>
+        <button class="mini-btn" id="setLineB" style="background:#fff; color:#000">SET B</button>
         <button class="mini-btn" onclick="location.reload()" style="background:#333">RESET</button>
     </div>
     <input type="range" id="seek-bar" value="0" min="0" step="1">
     <input type="file" id="fileInput" accept=".gpx" style="display:none">
+</div>
+
+<div id="lap-list-overlay">
+    <button class="mini-btn" onclick="document.getElementById('lap-list-overlay').style.display='none'">CLOSE</button>
+    <div id="lap-list-content"></div>
 </div>
 
 <script>
@@ -83,11 +99,12 @@
 let map, marker1, telChart, lapDataStore = [], currentFrame = 0, isPlaying = false;
 let primaryIdx = 0, lineAIdx = null, lineBIdx = null, autoLines = {};
 let latOffset = 0, lonOffset = 0, maxSpd = 10, maxRpm = 1000;
+let autoS1Time = null, autoS2Time = null, autoS3Time = null, autoS4Time = null;
 
 window.onload = () => {
     map = L.map('map', { zoomControl: false, maxZoom: 22 }).setView([35.68, 139.76], 15);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 22 }).addTo(map);
-    marker1 = L.circleMarker([0,0], {color:'#fff', fillColor:'#000', radius:8, fillOpacity:1, weight:2, zIndexOffset:1000}).addTo(map);
+    marker1 = L.circleMarker([0,0], {color:'#fff', fillColor:'#000', radius:8, fillOpacity:1, weight:2}).addTo(map);
     initDraggable(document.getElementById('data-dashboard'), document.getElementById('dash-handle'));
 };
 
@@ -114,127 +131,165 @@ function initDraggable(el, handle) {
     function dragEnd(){ document.onmouseup=null; document.onmousemove=null; document.ontouchend=null; document.ontouchmove=null; }
 }
 
-function getColor(spd) {
-    const ratio = Math.min(1, spd / maxSpd);
-    return `hsl(${240 - (ratio * 240)}, 100%, 50%)`;
-}
-
 document.getElementById('fileBtn').onclick = () => document.getElementById('fileInput').click();
 document.getElementById('fileInput').onchange = e => {
     const reader = new FileReader();
     reader.onload = evt => {
         const xml = new DOMParser().parseFromString(evt.target.result, "text/xml");
         parseLineData(xml);
-        parseGPX(xml);
+        processGlobalGPX(xml);
     };
     reader.readAsText(e.target.files[0]);
 };
 
-// GPXのdescタグから計測ライン情報を抽出
 function parseLineData(xml) {
     autoLines = {};
     const desc = xml.getElementsByTagName('desc')[0]?.textContent;
     if (desc && desc.includes('LINE_DATA[')) {
-        try {
-            const dataStr = desc.match(/\[(.*?)\]/)[1];
-            dataStr.split('|').forEach(item => {
+        const match = desc.match(/LINE_DATA\[(.*?)\]/);
+        if (match) {
+            match[1].split('|').forEach(item => {
                 const [key, val] = item.split(':');
-                if (val) {
+                if (val && val !== "SKIP") {
                     const c = val.split(',').map(Number);
-                    autoLines[key] = { p1: {lat: c[0], lon: c[1]}, p2: {lat: c[2], lon: c[3]} };
+                    if (c.length === 4) autoLines[key] = { p1: {lat: c[0], lon: c[1]}, p2: {lat: c[2], lon: c[3]} };
                 }
             });
-        } catch(e) { console.warn("Line data parse error", e); }
+        }
     }
 }
 
-function parseGPX(xml) {
-    const trks = xml.getElementsByTagName('trk');
+function processGlobalGPX(xml) {
+    const pts = xml.getElementsByTagName('trkpt');
+    if (!pts.length) return;
+    let allPoints = [];
+    for (let i = 0; i < pts.length; i++) {
+        const lat = parseFloat(pts[i].getAttribute('lat')), lon = parseFloat(pts[i].getAttribute('lon'));
+        const time = new Date(pts[i].getElementsByTagName('time')[0].textContent).getTime();
+        let rpm = 0;
+        const ext = pts[i].getElementsByTagName('extensions')[0];
+        if(ext) {
+            const rpmTag = ext.getElementsByTagName('rpm')[0] || ext.getElementsByTagName('ns3:rpm')[0];
+            rpm = parseInt(rpmTag?.textContent || 0);
+        }
+        allPoints.push({ lat, lon, time, rpm });
+    }
+
     lapDataStore = [];
-    let allPts = [];
-    for (let i = 0; i < trks.length; i++) {
-        const pts = trks[i].getElementsByTagName('trkpt');
-        if (!pts.length) continue;
-        let spds=[], crds=[], tms=[], rpms=[], dsts=[], dAcc=0;
-        const startT = new Date(pts[0].getElementsByTagName('time')[0].textContent);
-        for (let j = 0; j < pts.length; j++) {
-            const lat = parseFloat(pts[j].getAttribute('lat')), lon = parseFloat(pts[j].getAttribute('lon'));
-            let rpmValue = 0;
-            const ext = pts[j].getElementsByTagName('extensions')[0];
-            if(ext) { 
-                const rpmTag = ext.getElementsByTagName('rpm')[0] || ext.getElementsByTagName('ns3:rpm')[0]; 
-                if(rpmTag) rpmValue = parseInt(rpmTag.textContent) || 0; 
+    let currentLap = { coords: [], times: [], rpms: [], speeds: [], rawTimes: [] };
+    let lastSLTime = 0;
+
+    for (let i = 0; i < allPoints.length; i++) {
+        const p = allPoints[i];
+        currentLap.coords.push([p.lat, p.lon]);
+        currentLap.rpms.push(p.rpm);
+        currentLap.rawTimes.push(p.time);
+        
+        if (currentLap.coords.length > 1) {
+            const prev = currentLap.coords[currentLap.coords.length-2];
+            const dist = L.latLng(prev).distanceTo([p.lat, p.lon]);
+            const dt = (p.time - currentLap.rawTimes[currentLap.rawTimes.length-2]) / 1000;
+            currentLap.speeds.push(dt > 0 ? Math.round((dist/dt)*3.6) : 0);
+        } else { currentLap.speeds.push(0); }
+
+        if (i > 0 && autoLines.SL) {
+            if (getIntersect(allPoints[i-1], p, autoLines.SL)) {
+                if (p.time - lastSLTime > 10000) { 
+                    const startT = currentLap.rawTimes[0];
+                    currentLap.times = currentLap.rawTimes.map(t => (t - startT) / 1000);
+                    currentLap.duration = (p.time - (lastSLTime || allPoints[0].time));
+                    lapDataStore.push(currentLap);
+                    currentLap = { coords: [[p.lat, p.lon]], times: [], rpms: [p.rpm], speeds: [0], rawTimes: [p.time] };
+                    lastSLTime = p.time;
+                }
             }
-            const time = (new Date(pts[j].getElementsByTagName('time')[0].textContent) - startT) / 1000;
-            if (j > 0) dAcc += L.latLng(crds[j-1]).distanceTo([lat, lon]);
-            crds.push([lat, lon]); spds.push(0); tms.push(time); rpms.push(rpmValue); dsts.push(dAcc); 
-            allPts.push([lat, lon]);
         }
-        for(let j=1; j<spds.length; j++) {
-            let d = dsts[j]-dsts[j-1], t = tms[j]-tms[j-1];
-            spds[j] = t > 0 ? Math.round((d/t)*3.6) : spds[j-1];
+    }
+    const finalStartT = currentLap.rawTimes[0];
+    currentLap.times = currentLap.rawTimes.map(t => (t - finalStartT) / 1000);
+    currentLap.duration = (currentLap.rawTimes[currentLap.rawTimes.length-1] - finalStartT);
+    lapDataStore.push(currentLap);
+
+    primaryIdx = lapDataStore.length > 1 ? 1 : 0;
+    renderLapList();
+    updateUI();
+}
+
+function renderLapList() {
+    const container = document.getElementById('lap-list-content');
+    container.innerHTML = `<div class="lap-row-item" style="font-weight:bold; background:#333;">
+        <span style="flex:0.8">LAP</span><span>S1</span><span>S2</span><span>S3</span><span>S4</span><span style="flex:1.5">TOTAL</span>
+    </div>`;
+
+    lapDataStore.forEach((lap, i) => {
+        let s1=null, s2=null, s3=null;
+        for (let j = 1; j < lap.coords.length; j++) {
+            const p1 = {lat: lap.coords[j-1][0], lon: lap.coords[j-1][1]}, p2 = {lat: lap.coords[j][0], lon: lap.coords[j][1]};
+            if (!s1 && autoLines.S1 && getIntersect(p1, p2, autoLines.S1)) s1 = lap.times[j];
+            if (!s2 && autoLines.S2 && getIntersect(p1, p2, autoLines.S2)) s2 = lap.times[j];
+            if (!s3 && autoLines.S3 && getIntersect(p1, p2, autoLines.S3)) s3 = lap.times[j];
         }
-        lapDataStore.push({ speeds: spds, coords: crds, times: tms, rpms: rpms, duration: tms[tms.length-1] });
-    }
-    if (lapDataStore.length > 0) {
-        map.fitBounds(L.latLngBounds(allPts));
-        updateUI();
-    }
+        const ss1 = s1 ? s1.toFixed(2) : "--";
+        const ss2 = (s1 && s2) ? (s2-s1).toFixed(2) : "--";
+        const ss3 = (s2 && s3) ? (s3-s2).toFixed(2) : "--";
+        const lastT = s3 || s2 || s1;
+        const ss4 = lastT ? ((lap.duration/1000) - lastT).toFixed(2) : "--";
+
+        const div = document.createElement('div');
+        div.className = "lap-row-item";
+        div.innerHTML = `<span style="flex:0.8">L${i}</span><span>${ss1}</span><span>${ss2}</span><span>${ss3}</span><span>${ss4}</span><span style="flex:1.5; color:var(--hrc-red); font-weight:bold;">${(lap.duration/1000).toFixed(3)}s</span>`;
+        div.onclick = () => { primaryIdx = i; currentFrame = 0; document.getElementById('lap-list-overlay').style.display = 'none'; updateUI(); };
+        container.appendChild(div);
+    });
 }
 
 function updateUI() {
     const p = lapDataStore[primaryIdx]; if(!p) return;
-    maxSpd = Math.max(...p.speeds, 10);
-    maxRpm = Math.max(...p.rpms, 1000);
+    maxSpd = Math.max(...p.speeds, 1); maxRpm = Math.max(...p.rpms, 1);
     document.getElementById('seek-bar').max = p.speeds.length - 1;
-    
+
     if (window.pathLayer) map.removeLayer(window.pathLayer);
     const g = L.featureGroup();
     
-    // 走行ライン描画
-    for (let i = 1; i < p.coords.length; i++) {
-        const c1 = [p.coords[i-1][0] + latOffset, p.coords[i-1][1] + lonOffset];
-        const c2 = [p.coords[i][0] + latOffset, p.coords[i][1] + lonOffset];
-        L.polyline([c1, c2], { color: getColor(p.speeds[i]), weight: 6, opacity: 0.8 }).addTo(g);
-    }
+    // 走行ライン
+    const latlngs = p.coords.map(c => [c[0] + latOffset, c[1] + lonOffset]);
+    L.polyline(latlngs, { color: '#33ccff', weight: 4, opacity: 0.8 }).addTo(g);
     
-    // スタートライン・セクターライン描画
+    // 計測ライン
     Object.keys(autoLines).forEach(key => {
         const line = autoLines[key];
-        const color = (key === 'SL') ? '#ffffff' : '#ffff00'; // SLは白、それ以外(S1,S2,S3)は黄色
-        const weight = (key === 'SL') ? 4 : 3;
-        L.polyline([
-            [line.p1.lat + latOffset, line.p1.lon + lonOffset],
-            [line.p2.lat + latOffset, line.p2.lon + lonOffset]
-        ], { color: color, weight: weight, dashArray: '5, 5' }).addTo(g).bindTooltip(key, {permanent: true, direction: 'right'});
+        const color = (key === 'SL') ? '#ffffff' : '#ffff00';
+        L.polyline([[line.p1.lat + latOffset, line.p1.lon + lonOffset], [line.p2.lat + latOffset, line.p2.lon + lonOffset]], 
+            { color: color, weight: key==='SL'?5:3, dashArray: '8, 8' }).addTo(g).bindTooltip(key, { permanent: true, className: 'line-label' });
     });
 
     window.pathLayer = g.addTo(map);
+    map.fitBounds(g.getBounds(), { padding: [20, 20] });
+    
     detectAutoSectors();
     createCharts();
     updateFrame();
 }
 
-// 自動セクタータイムの計算
-let autoS1Time = null, autoS2Time = null, autoS3Time = null;
 function detectAutoSectors() {
-    autoS1Time = null; autoS2Time = null; autoS3Time = null;
+    autoS1Time = null; autoS2Time = null; autoS3Time = null; autoS4Time = null;
     const p = lapDataStore[primaryIdx];
     for (let j = 1; j < p.coords.length; j++) {
-        const p1 = {lat: p.coords[j-1][0], lon: p.coords[j-1][1]};
-        const p2 = {lat: p.coords[j][0], lon: p.coords[j][1]};
+        const p1 = {lat: p.coords[j-1][0], lon: p.coords[j-1][1]}, p2 = {lat: p.coords[j][0], lon: p.coords[j][1]};
         if (!autoS1Time && autoLines.S1 && getIntersect(p1, p2, autoLines.S1)) autoS1Time = p.times[j];
         if (!autoS2Time && autoLines.S2 && getIntersect(p1, p2, autoLines.S2)) autoS2Time = p.times[j];
         if (!autoS3Time && autoLines.S3 && getIntersect(p1, p2, autoLines.S3)) autoS3Time = p.times[j];
     }
+    const lastT = autoS3Time || autoS2Time || autoS1Time;
+    if (lastT) autoS4Time = (p.duration / 1000) - lastT;
 }
 
 function getIntersect(p1, p2, line) {
+    if(!line) return false;
     const x1=p1.lon, y1=p1.lat, x2=p2.lon, y2=p2.lat, x3=line.p1.lon, y3=line.p1.lat, x4=line.p2.lon, y4=line.p2.lat;
     const den = (y4-y3)*(x2-x1)-(x4-x3)*(y2-y1);
     if (den === 0) return false;
-    const ua = ((x4-x3)*(y1-y3)-(y4-y3)*(x1-x3))/den;
-    const ub = ((x2-x1)*(y1-y3)-(y2-y1)*(x1-x3))/den;
+    const ua = ((x4-x3)*(y1-y3)-(y4-y3)*(x1-x3))/den, ub = ((x2-x1)*(y1-y3)-(y2-y1)*(x1-x3))/den;
     return (ua >= 0 && ua <= 1 && ub >= 0 && ub <= 1);
 }
 
@@ -242,16 +297,14 @@ function updateFrame() {
     const p = lapDataStore[primaryIdx]; if(!p) return;
     const idx = Math.min(currentFrame, p.speeds.length - 1);
     marker1.setLatLng([p.coords[idx][0] + latOffset, p.coords[idx][1] + lonOffset]);
-    marker1.setStyle({fillColor: getColor(p.speeds[idx])});
     
     document.getElementById('dash-time').innerText = p.times[idx].toFixed(2) + "s";
     document.getElementById('dash-spd').innerText = p.speeds[idx] + " km/h";
     document.getElementById('dash-rpm').innerText = p.rpms[idx];
-    
-    // セクター表示の更新
     document.getElementById('s1-val').innerText = autoS1Time ? autoS1Time.toFixed(3) + "s" : "--.---s";
     document.getElementById('s2-val').innerText = (autoS1Time && autoS2Time) ? (autoS2Time - autoS1Time).toFixed(3) + "s" : "--.---s";
     document.getElementById('s3-val').innerText = (autoS2Time && autoS3Time) ? (autoS3Time - autoS2Time).toFixed(3) + "s" : "--.---s";
+    document.getElementById('s4-val').innerText = autoS4Time ? autoS4Time.toFixed(3) + "s" : "--.---s";
     
     let manualTime = "--.---";
     if(lineAIdx !== null && lineBIdx !== null) manualTime = Math.abs(p.times[lineBIdx] - p.times[lineAIdx]).toFixed(3);
@@ -267,19 +320,16 @@ function updateFrame() {
 function createCharts() {
     const ctxT = document.getElementById('telemetryChart').getContext('2d');
     const p = lapDataStore[primaryIdx]; if (telChart) telChart.destroy();
-    const annotations = { now: { type:'line', xMin:0, xMax:0, borderColor:'#fff', borderWidth:2, zIndex:10 } };
-    if(lineAIdx!==null) annotations.lineA = { type:'line', xMin:lineAIdx, xMax:lineAIdx, borderColor:'#fff', borderWidth:2 };
-    if(lineBIdx!==null) annotations.lineB = { type:'line', xMin:lineBIdx, xMax:lineBIdx, borderColor:'#33ccff', borderWidth:2 };
-    
     telChart = new Chart(ctxT, {
-        type: 'line', data: { labels: p.times.map((_,i)=>i), datasets: [{ label:'SPD', data:p.speeds, borderColor:'#f44', pointRadius:0, yAxisID:'y' },{ label:'RPM', data:p.rpms, borderColor:'#0f0', pointRadius:0, yAxisID:'y1' }] },
-        options: { responsive:true, maintainAspectRatio:false, animation:false, scales: { x:{display:false}, y:{min:0, suggestedMax:maxSpd}, y1:{position:'right', grid:{display:false}, min:0, suggestedMax:maxRpm} }, plugins: { legend:{display:false}, annotation:{annotations} } }
+        type: 'line', 
+        data: { labels: p.times.map((_,i)=>i), datasets: [{ label:'SPD', data:p.speeds, borderColor:'#f44', pointRadius:0, yAxisID:'y' },{ label:'RPM', data:p.rpms, borderColor:'#0f0', pointRadius:0, yAxisID:'y1' }] },
+        options: { responsive:true, maintainAspectRatio:false, animation:false, scales: { x:{display:false}, y:{min:0, suggestedMax:maxSpd}, y1:{position:'right', grid:{display:false}, min:0, suggestedMax:maxRpm} }, plugins: { legend:{display:false}, annotation:{annotations:{now:{type:'line', xMin:0, xMax:0, borderColor:'#fff', borderWidth:2}}} } }
     });
 }
 
 document.getElementById('setLineA').onclick = () => { lineAIdx = currentFrame; updateUI(); };
 document.getElementById('setLineB').onclick = () => { lineBIdx = currentFrame; updateUI(); };
-document.getElementById('openListBtn').onclick = () => { /* LapList描画は共通 */ document.getElementById('lap-list-overlay').style.display='flex'; };
+document.getElementById('openListBtn').onclick = () => document.getElementById('lap-list-overlay').style.display='flex';
 document.getElementById('seek-bar').oninput = () => { currentFrame = parseInt(document.getElementById('seek-bar').value); updateFrame(); };
 document.getElementById('playBtn').onclick = function() { isPlaying = !isPlaying; this.innerText = isPlaying ? "PAUSE" : "PLAY"; if(isPlaying) animate(); };
 function animate() { if(!isPlaying) return; if(currentFrame >= lapDataStore[primaryIdx].speeds.length-1) { isPlaying=false; document.getElementById('playBtn').innerText="PLAY"; return; } currentFrame++; document.getElementById('seek-bar').value = currentFrame; updateFrame(); requestAnimationFrame(animate); }
