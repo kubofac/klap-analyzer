@@ -3,48 +3,40 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>KLAP ANALYZER V11.9.5</title>
+    <title>KLAP ANALYZER V11.9.9</title>
      <link rel="manifest" href="/manifest.json">  
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1"></script>
     <style>
-        :root { --hrc-red: #ff4444; --hrc-blue: #33ccff; --hrc-green: #00ff00; --hrc-orange: #ff9900; --hrc-yellow: #ffeb3b; }
+        :root { --hrc-red: #ff4444; --hrc-blue: #33ccff; --hrc-purple: #e040fb; --hrc-orange: #ff9900; }
         html, body { overflow: hidden; width: 100%; height: 100%; background: #000; margin: 0; padding: 0; font-family: sans-serif; color: #fff; }
         #main-container { display: flex; height: calc(100vh - 105px); width: 100%; }
         #map { width: 35%; height: 100%; border-right: 1px solid #444; background: #222; position: relative; }
         #chart-area { width: 65%; height: 100%; background: #000; position: relative; }
-        .chart-full-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
-
-        /* 地図調整 */
-        #map-adjust-ctrls { position: absolute; bottom: 20px; left: 10px; z-index: 1000; display: grid; grid-template-columns: repeat(3, 40px); gap: 5px; }
-        .adj-btn { width: 40px; height: 40px; background: rgba(0,0,0,0.8); color: white; border: 1px solid #fff; border-radius: 5px; cursor: pointer; font-weight: bold; }
-
-        /* Dashboard (動的レイアウト) */
-        .draggable-panel { position: absolute; z-index: 5000; background: rgba(0,0,0,0.9); border-radius: 8px; border: 1.5px solid #666; width: auto; min-width: 160px; }
-        .panel-header { background: #333; color: white; font-size: 11px; padding: 8px; text-align: center; cursor: move; border-radius: 8px 8px 0 0; }
+        
+        /* Dashboard */
+        .draggable-panel { position: absolute; z-index: 5000; background: rgba(0,0,0,0.9); border-radius: 8px; border: 1.5px solid #666; width: auto; min-width: 160px; pointer-events: auto; }
+        .panel-header { background: #333; color: #fff; font-size: 11px; padding: 10px; text-align: center; cursor: move; border-radius: 8px 8px 0 0; user-select: none; }
         #dash-content { padding: 10px; font-family: 'Courier New', monospace; font-size: 11px; pointer-events: none; }
-        
-        /* グリッド設定: 1列(単体)か2列(比較)かでJSで切り替える */
         .dash-grid { display: grid; gap: 8px; text-align: right; margin-bottom: 4px; align-items: center; }
-        .grid-label { text-align: left; color: #aaa; min-width: 50px; }
-        
-        /* 比較用表示 (初期は非表示) */
+        .grid-label { text-align: left; color: #888; min-width: 50px; }
         .comp-only { display: none; }
 
-        /* ラップリスト */
-        #lap-list-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); z-index: 10000; flex-direction: column; padding: 15px; box-sizing: border-box; }
-        #lap-list-content { overflow-y: auto; margin-top: 10px; border-top: 1px solid #444; }
-        .lap-row { display: grid; grid-template-columns: 45px repeat(4, 1fr) 1.2fr 0.8fr 0.8fr; gap: 2px; padding: 12px 2px; border-bottom: 1px solid #333; cursor: pointer; text-align: center; font-size: 11px; align-items: center; }
-        .lap-row.sel-p { background: rgba(51, 204, 255, 0.25); outline: 1px solid var(--hrc-blue); }
-        .lap-row.sel-s { background: rgba(255, 68, 68, 0.25); outline: 1px solid var(--hrc-red); }
-        .t-s1 { color: var(--hrc-yellow); }
-        .t-s2 { color: var(--hrc-orange); }
-        .t-s3 { color: var(--hrc-blue); }
-        .t-s4 { color: var(--hrc-green); }
-        .t-total { color: var(--hrc-red); font-weight: bold; font-size: 13px; }
-        .t-max-val { background: rgba(255, 153, 0, 0.4); border-radius: 3px; color: #fff; font-weight: bold; }
+        /* Lap List Overlay (White Text, Clean Best Highlight) */
+        #lap-list-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.98); z-index: 10000; flex-direction: column; padding: 15px; box-sizing: border-box; }
+        #lap-list-content { overflow-y: auto; margin-top: 10px; border-top: 1px solid #333; }
+        .lap-row { display: grid; grid-template-columns: 40px repeat(4, 1fr) 1.2fr 0.8fr 0.8fr; gap: 2px; padding: 12px 2px; border-bottom: 1px solid #222; cursor: pointer; text-align: center; font-size: 11px; align-items: center; color: #fff; }
+        .lap-row.sel-p { background: rgba(51, 204, 255, 0.2); outline: 1px solid var(--hrc-blue); }
+        .lap-row.sel-s { background: rgba(255, 68, 68, 0.2); outline: 1px solid var(--hrc-red); }
+        
+        /* ベスト値のハイライト */
+        .val-best { color: var(--hrc-purple) !important; font-weight: bold; } /* セクター最速：紫 */
+        .lap-best { color: var(--hrc-red) !important; font-weight: bold; font-size: 13px; } /* 周回最速：赤 */
+        .stat-best { background: var(--hrc-orange); color: #000 !important; font-weight: bold; border-radius: 2px; } /* MAX値：橙背景 */
+        
+        .list-header { background: #111; font-weight: bold; font-size: 10px; color: #555 !important; position: sticky; top: 0; z-index: 1; }
 
         #controls { position: fixed; bottom: 0; left: 0; width: 100%; height: 105px; background: #111; z-index: 999; padding: 5px; box-sizing: border-box; }
         .ctrl-row { display: flex; align-items: center; gap: 5px; height: 45px; overflow-x: auto; }
@@ -55,65 +47,53 @@
 <body>
 
 <div id="main-container">
-    <div id="map">
-        <div id="map-adjust-ctrls">
-            <div style="grid-column: 2;"><button class="adj-btn" onclick="adjustMap(0.00001, 0)">↑</button></div>
-            <div style="grid-row: 2;"><button class="adj-btn" onclick="adjustMap(0, -0.00001)">←</button></div>
-            <div style="grid-row: 2;"><button class="adj-btn" onclick="adjustMap(-0.00001, 0)">↓</button></div>
-            <div style="grid-row: 2;"><button class="adj-btn" onclick="adjustMap(0, 0.00001)">→</button></div>
-        </div>
-    </div>
+    <div id="map"></div>
     <div id="chart-area">
         <div id="data-dashboard" class="draggable-panel" style="top:10px; right:10px;">
-            <div class="panel-header" id="dash-handle">✜ DASHBOARD</div>
+            <div class="panel-header" id="dash-handle">DRAG HERE TO MOVE</div>
             <div id="dash-content">
-                <div id="dash-grid-container">
-                    <div class="dash-grid" id="dash-header" style="font-weight:bold; border-bottom:1px solid #444; padding-bottom:3px;">
-                        <span class="grid-label">ITEM</span><span id="label-p" style="color:var(--hrc-blue)">DATA</span><span id="label-s" class="comp-only" style="color:var(--hrc-red)">REF</span>
-                    </div>
-                    <div class="dash-grid"><span class="grid-label">LAP#</span><span id="p-lap-id">-</span><span id="s-lap-id" class="comp-only">-</span></div>
-                    <div class="dash-grid"><span class="grid-label">SPD</span><span id="p-spd">-</span><span id="s-spd" class="comp-only">-</span></div>
-                    <div class="dash-grid"><span class="grid-label">RPM</span><span id="p-rpm">-</span><span id="s-rpm" class="comp-only">-</span></div>
-                    <hr style="border:0; border-top:1px solid #333;">
-                    <div class="dash-grid"><span class="grid-label">S1</span><span id="p-s1" class="t-s1">-</span><span id="s-s1" class="t-s1 comp-only">-</span></div>
-                    <div class="dash-grid"><span class="grid-label">S2</span><span id="p-s2" class="t-s2">-</span><span id="s-s2" class="t-s2 comp-only">-</span></div>
-                    <div class="dash-grid"><span class="grid-label">S3</span><span id="p-s3" class="t-s3">-</span><span id="s-s3" class="t-s3 comp-only">-</span></div>
-                    <div class="dash-grid"><span class="grid-label">S4</span><span id="p-s4" class="t-s4">-</span><span id="s-s4" class="t-s4 comp-only">-</span></div>
-                    <hr style="border:0; border-top:1px solid #333;">
-                    <div class="dash-grid" style="color:var(--hrc-yellow)"><span class="grid-label">A-B</span><span id="p-ab">-</span><span id="s-ab" class="comp-only">-</span></div>
-                    <div id="delta-row" class="comp-only dash-grid" style="margin-top:5px; padding-top:5px; border-top:1px solid #444;">
-                        <span class="grid-label" style="color:var(--hrc-green)">DIFF</span><span id="delta-val" style="grid-column: span 2; color:var(--hrc-green); font-weight:bold;">0.000s</span>
-                    </div>
+                <div class="dash-grid" id="dash-header" style="font-weight:bold; border-bottom:1px solid #444; padding-bottom:5px;">
+                    <span class="grid-label">ITEM</span><span id="label-p">DATA</span><span id="label-s" class="comp-only">REF</span>
+                </div>
+                <div class="dash-grid"><span class="grid-label">LAP#</span><span id="p-lap-id">-</span><span id="s-lap-id" class="comp-only">-</span></div>
+                <div class="dash-grid"><span class="grid-label">SPD</span><span id="p-spd">-</span><span id="s-spd" class="comp-only">-</span></div>
+                <div class="dash-grid"><span class="grid-label">RPM</span><span id="p-rpm">-</span><span id="s-rpm" class="comp-only">-</span></div>
+                <hr style="border:0; border-top:1px solid #333;">
+                <div class="dash-grid"><span class="grid-label">S1</span><span id="p-s1">-</span><span id="s-s1" class="comp-only">-</span></div>
+                <div class="dash-grid"><span class="grid-label">S2</span><span id="p-s2">-</span><span id="s-s2" class="comp-only">-</span></div>
+                <div class="dash-grid"><span class="grid-label">S3</span><span id="p-s3">-</span><span id="s-s3" class="comp-only">-</span></div>
+                <div class="dash-grid"><span class="grid-label">S4</span><span id="p-s4">-</span><span id="s-s4" class="comp-only">-</span></div>
+                <div id="delta-row" class="comp-only dash-grid" style="margin-top:5px; padding-top:5px; border-top:1px solid #444; color:var(--hrc-green);">
+                    <span class="grid-label">DIFF</span><span id="delta-val" style="grid-column: span 2; font-weight:bold;">0.000s</span>
                 </div>
             </div>
         </div>
-        <div class="chart-full-container"><canvas id="mainChart"></canvas></div>
+        <div style="height:100%; width:100%;"><canvas id="mainChart"></canvas></div>
     </div>
 </div>
 
 <div id="controls">
     <div class="ctrl-row">
         <button class="mini-btn" id="playBtn" style="background:var(--hrc-red)">PLAY</button>
-        <button class="mini-btn" id="fileBtn">GPX OPEN</button>
+        <button class="mini-btn" id="fileBtn">OPEN GPX</button>
         <button class="mini-btn" id="openListBtn" style="background:var(--hrc-blue)">LAP LIST</button>
-        <button class="mini-btn" id="setLineA" style="background:#fff; color:#000">SET A</button>
-        <button class="mini-btn" id="setLineB" style="background:#fff; color:#000">SET B</button>
-        <button class="mini-btn" onclick="location.reload()" style="background:#333">RESET</button>
+        <button class="mini-btn" id="setLineA">SET A</button>
+        <button class="mini-btn" onclick="location.reload()">RESET</button>
     </div>
-    <input type="range" id="seek-bar" value="0" min="0" step="1">
+    <input type="range" id="seek-bar" value="0">
     <input type="file" id="fileInput" accept=".gpx" style="display:none">
 </div>
 
 <div id="lap-list-overlay">
-    <h3 style="text-align:center; margin:5px 0;">SELECT LAPS (MAX 2)</h3>
+    <h3 style="text-align:center; color:#888;">LAP DATA HISTORY</h3>
     <div id="lap-list-content"></div>
-    <button class="mini-btn" style="margin-top:15px; width:100%; height:50px; background:var(--hrc-blue); font-size:14px;" onclick="closeLapList()">CLOSE & ANALYZE</button>
+    <button class="mini-btn" style="margin-top:15px; width:100%; height:50px; background:var(--hrc-blue); font-size:16px;" onclick="closeLapList()">CLOSE LIST</button>
 </div>
 
 <script>
 'use strict';
 let map, markerP, markerS, mainChart, lapDataStore = [], currentFrame = 0, isPlaying = false;
-let primaryIdx = null, secondaryIdx = null, autoLines = {}, lineAIdx = null, lineBIdx = null;
+let primaryIdx = 0, secondaryIdx = null, autoLines = {}, lineAIdx = null;
 let latOffset = 0, lonOffset = 0;
 
 window.onload = () => {
@@ -121,16 +101,21 @@ window.onload = () => {
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 22 }).addTo(map);
     markerP = L.circleMarker([0,0], {color:'#33ccff', fillColor:'#000', radius:7, fillOpacity:1, weight:3}).addTo(map);
     markerS = L.circleMarker([0,0], {color:'#ff4444', fillColor:'#000', radius:7, fillOpacity:1, weight:3}).addTo(map);
-    initDraggable(document.getElementById('data-dashboard'), document.getElementById('dash-handle'));
+    enableDragging(document.getElementById('data-dashboard'));
 };
 
-function adjustMap(dLat, dLon) { latOffset += dLat; lonOffset += dLon; updateUI(); }
-
-function initDraggable(el, handle) {
-    let p1=0, p2=0, p3=0, p4=0;
-    handle.onmousedown = (e) => { p3=e.clientX; p4=e.clientY; document.onmouseup=dragEnd; document.onmousemove=dragMove; };
-    function dragMove(e) { p1=p3-e.clientX; p2=p4-e.clientY; p3=e.clientX; p4=e.clientY; el.style.top=(el.offsetTop-p2)+"px"; el.style.left=(el.offsetLeft-p1)+"px"; }
-    function dragEnd(){ document.onmouseup=null; document.onmousemove=null; }
+function enableDragging(el) {
+    const handle = document.getElementById('dash-handle');
+    handle.onmousedown = (e) => {
+        let startX = e.clientX, startY = e.clientY;
+        const onMouseMove = (ev) => {
+            el.style.left = (el.offsetLeft + (ev.clientX - startX)) + "px";
+            el.style.top = (el.offsetTop + (ev.clientY - startY)) + "px";
+            startX = ev.clientX; startY = ev.clientY;
+        };
+        document.addEventListener('mousemove', onMouseMove);
+        document.onmouseup = () => { document.removeEventListener('mousemove', onMouseMove); document.onmouseup = null; };
+    };
 }
 
 document.getElementById('fileBtn').onclick = () => document.getElementById('fileInput').click();
@@ -138,12 +123,12 @@ document.getElementById('fileInput').onchange = e => {
     const reader = new FileReader();
     reader.onload = evt => {
         const xml = new DOMParser().parseFromString(evt.target.result, "text/xml");
-        parseLineData(xml); processGlobalGPX(xml);
+        parseMeta(xml); processGPX(xml);
     };
     reader.readAsText(e.target.files[0]);
 };
 
-function parseLineData(xml) {
+function parseMeta(xml) {
     autoLines = {};
     const desc = xml.getElementsByTagName('desc')[0]?.textContent;
     if (desc?.includes('LINE_DATA[')) {
@@ -155,7 +140,7 @@ function parseLineData(xml) {
     }
 }
 
-function processGlobalGPX(xml) {
+function processGPX(xml) {
     const pts = xml.getElementsByTagName('trkpt');
     let allPoints = [];
     for (let i = 0; i < pts.length; i++) {
@@ -184,7 +169,6 @@ function processGlobalGPX(xml) {
             }
         }
     }
-    primaryIdx = lapDataStore.length > 0 ? 0 : null;
     renderLapList(); updateUI();
 }
 
@@ -205,29 +189,43 @@ function calculateSectors(lap) {
         if (!s3 && autoLines.S3 && getIntersect(p1, p2, autoLines.S3)) s3 = lap.times[j];
     }
     const lastT = s3 || s2 || s1;
-    return { s1: s1?s1.toFixed(3):"--", s2: (s1&&s2)?(s2-s1).toFixed(3):"--", s3: (s2&&s3)?(s3-s2).toFixed(3):"--", s4: lastT?((lap.duration/1000)-lastT).toFixed(3):"--" };
+    return { 
+        s1: s1 || 999, s2: (s1&&s2)?(s2-s1) : 999, 
+        s3: (s2&&s3)?(s3-s2) : 999, s4: lastT?((lap.duration/1000)-lastT) : 999 
+    };
 }
 
 function renderLapList() {
     const c = document.getElementById('lap-list-content');
     if(lapDataStore.length === 0) return;
-    const globalMaxSpd = Math.max(...lapDataStore.map(l => Math.max(...l.speeds)));
-    const globalMaxRpm = Math.max(...lapDataStore.map(l => Math.max(...l.rpms)));
 
-    c.innerHTML = `<div class="lap-row list-header"><span>LAP</span><span>S1</span><span>S2</span><span>S3</span><span>S4</span><span>TOTAL</span><span>SPD</span><span>RPM</span></div>`;
+    const lapsSectors = lapDataStore.map(l => calculateSectors(l));
+    const bestS1 = Math.min(...lapsSectors.map(s => s.s1));
+    const bestS2 = Math.min(...lapsSectors.map(s => s.s2));
+    const bestS3 = Math.min(...lapsSectors.map(s => s.s3));
+    const bestS4 = Math.min(...lapsSectors.map(s => s.s4));
+    const bestTotal = Math.min(...lapDataStore.map(l => l.duration));
+    const globalMaxS = Math.max(...lapDataStore.map(l => Math.max(...l.speeds)));
+    const globalMaxR = Math.max(...lapDataStore.map(l => Math.max(...l.rpms)));
+
+    c.innerHTML = `<div class="lap-row list-header"><span>LAP</span><span>S1</span><span>S2</span><span>S3</span><span>S4</span><span>TOTAL</span><span>MAX S</span><span>MAX R</span></div>`;
+    
     lapDataStore.forEach((l, i) => {
-        const s = calculateSectors(l);
-        const maxSpd = Math.max(...l.speeds);
-        const maxRpm = Math.max(...l.rpms);
+        const s = lapsSectors[i];
+        const maxS = Math.max(...l.speeds);
+        const maxR = Math.max(...l.rpms);
         const div = document.createElement('div');
         div.className = `lap-row ${primaryIdx===i?'sel-p':''} ${secondaryIdx===i?'sel-s':''}`;
+        
+        const wrapBest = (val, best) => `<span class="${val===best?'val-best':''}">${val===999?'--':val.toFixed(3)}</span>`;
+        
         div.innerHTML = `
-            <span style="color:#fff">L${i}</span>
-            <span class="t-s1">${s.s1}</span><span class="t-s2">${s.s2}</span>
-            <span class="t-s3">${s.s3}</span><span class="t-s4">${s.s4}</span>
-            <span class="t-total">${(l.duration/1000).toFixed(3)}s</span>
-            <span class="${maxSpd>=globalMaxSpd?'t-max-val':''}">${Math.round(maxSpd)}</span>
-            <span class="${maxRpm>=globalMaxRpm?'t-max-val':''}">${maxRpm}</span>`;
+            <span>L${i}</span>
+            ${wrapBest(s.s1, bestS1)} ${wrapBest(s.s2, bestS2)} ${wrapBest(s.s3, bestS3)} ${wrapBest(s.s4, bestS4)}
+            <span class="${l.duration===bestTotal?'lap-best':''}">${(l.duration/1000).toFixed(3)}s</span>
+            <span class="${maxS===globalMaxS?'stat-best':''}">${Math.round(maxS)}</span>
+            <span class="${maxR===globalMaxR?'stat-best':''}">${maxR}</span>
+        `;
         div.onclick = () => {
             if(primaryIdx===i) primaryIdx=null;
             else if(secondaryIdx===i) secondaryIdx=null;
@@ -241,23 +239,9 @@ function renderLapList() {
 
 function closeLapList() { 
     document.getElementById('lap-list-overlay').style.display='none'; 
-    currentFrame=0; 
-    
-    // DASHBOARDのレイアウト切り替え
     const isComp = (secondaryIdx !== null);
-    const grids = document.querySelectorAll('.dash-grid');
-    const compElements = document.querySelectorAll('.comp-only');
-    
-    grids.forEach(g => {
-        g.style.gridTemplateColumns = isComp ? "50px 70px 70px" : "50px 80px";
-    });
-    
-    compElements.forEach(el => {
-        el.style.display = isComp ? "block" : "none";
-    });
-    
-    document.getElementById('label-p').innerText = isComp ? "BLUE" : "DATA";
-    
+    document.querySelectorAll('.dash-grid').forEach(g => g.style.gridTemplateColumns = isComp ? "50px 70px 70px" : "50px 80px");
+    document.querySelectorAll('.comp-only').forEach(el => el.style.display = isComp ? "block" : "none");
     updateUI(); 
 }
 
@@ -267,7 +251,6 @@ function updateUI() {
     document.getElementById('seek-bar').max = p.speeds.length - 1;
     if (window.pathLayer) map.removeLayer(window.pathLayer);
     const g = L.featureGroup();
-    
     const maxS = Math.max(...p.speeds);
     for(let i=1; i<p.coords.length; i++) {
         const ratio = p.speeds[i] / (maxS || 1);
@@ -275,18 +258,12 @@ function updateUI() {
         L.polyline([[p.coords[i-1][0]+latOffset, p.coords[i-1][1]+lonOffset],[p.coords[i][0]+latOffset, p.coords[i][1]+lonOffset]], {color, weight:4}).addTo(g);
     }
     if(secondaryIdx !== null) L.polyline(lapDataStore[secondaryIdx].coords.map(c=>[c[0]+latOffset, c[1]+lonOffset]), {color:'#ff4444', weight:2, dashArray:'5,5', opacity:0.6}).addTo(g);
-    
-    Object.keys(autoLines).forEach(key => {
-        const line = autoLines[key];
-        L.polyline([[line.p1.lat+latOffset, line.p1.lon+lonOffset], [line.p2.lat+latOffset, line.p2.lon+lonOffset]], {color:key==='SL'?'#fff':'#ff0', weight:2}).addTo(g).bindTooltip(key, {permanent:true, className:'line-label'});
-    });
     window.pathLayer = g.addTo(map); map.fitBounds(g.getBounds());
     createCharts(); updateFrame();
 }
 
 function createCharts() {
-    const p = lapDataStore[primaryIdx]; const ctxM = document.getElementById('mainChart').getContext('2d');
-    if (mainChart) mainChart.destroy();
+    const p = lapDataStore[primaryIdx];
     const datasets = [
         { label:'SPD P', data:p.speeds, borderColor:'#33ccff', pointRadius:0, yAxisID:'y', borderWidth:3 },
         { label:'RPM P', data:p.rpms, borderColor:'rgba(0,255,0,0.6)', pointRadius:0, yAxisID:'y1', borderDash:[2,2] }
@@ -296,9 +273,10 @@ function createCharts() {
         datasets.push({ label:'SPD S', data:s.speeds, borderColor:'#ff4444', pointRadius:0, yAxisID:'y', borderWidth:3 });
         datasets.push({ label:'RPM S', data:s.rpms, borderColor:'rgba(255,165,0,0.6)', pointRadius:0, yAxisID:'y1', borderDash:[2,2] });
     }
-    mainChart = new Chart(ctxM, {
+    if (mainChart) mainChart.destroy();
+    mainChart = new Chart(document.getElementById('mainChart').getContext('2d'), {
         type:'line', data:{ labels:p.times.map((_,i)=>i), datasets },
-        options:{ responsive:true, maintainAspectRatio:false, animation:false, scales:{ x:{display:false}, y:{position:'left', min:0, title:{display:true, text:'SPD(km/h)'}}, y1:{position:'right', min:0, grid:{display:false}, title:{display:true, text:'RPM'}} }, plugins:{ legend:{display:false}, annotation:{annotations:{now:{type:'line', xMin:0, xMax:0, borderColor:'#fff', borderWidth:2}}} } }
+        options:{ responsive:true, maintainAspectRatio:false, animation:false, scales:{ x:{display:false}, y:{position:'left', min:0}, y1:{position:'right', min:0, grid:{display:false}} }, plugins:{ legend:{display:false}, annotation:{annotations:{now:{type:'line', xMin:0, xMax:0, borderColor:'#fff', borderWidth:2}}} } }
     });
 }
 
@@ -306,33 +284,33 @@ function updateFrame() {
     if (primaryIdx === null) return;
     const p = lapDataStore[primaryIdx]; const idx = Math.min(currentFrame, p.speeds.length-1);
     markerP.setLatLng([p.coords[idx][0]+latOffset, p.coords[idx][1]+lonOffset]);
-    const pS = calculateSectors(p);
+    const s = calculateSectors(p);
     document.getElementById('p-lap-id').innerText = primaryIdx;
     document.getElementById('p-spd').innerText = Math.round(p.speeds[idx]);
     document.getElementById('p-rpm').innerText = p.rpms[idx];
-    document.getElementById('p-s1').innerText = pS.s1; document.getElementById('p-s2').innerText = pS.s2;
-    document.getElementById('p-s3').innerText = pS.s3; document.getElementById('p-s4').innerText = pS.s4;
-    
-    if(lineAIdx!==null && lineBIdx!==null) document.getElementById('p-ab').innerText = Math.abs(p.times[idx]-p.times[lineAIdx]).toFixed(3) + "s";
+    document.getElementById('p-s1').innerText = s.s1===999?'--':s.s1.toFixed(3);
+    document.getElementById('p-s2').innerText = s.s2===999?'--':s.s2.toFixed(3);
+    document.getElementById('p-s3').innerText = s.s3===999?'--':s.s3.toFixed(3);
+    document.getElementById('p-s4').innerText = s.s4===999?'--':s.s4.toFixed(3);
 
     if (secondaryIdx !== null) {
-        const s = lapDataStore[secondaryIdx]; const sIdx = Math.min(currentFrame, s.speeds.length-1);
-        markerS.setLatLng([s.coords[sIdx][0]+latOffset, s.coords[sIdx][1]+lonOffset]);
-        const sS = calculateSectors(s);
+        const ref = lapDataStore[secondaryIdx]; const rIdx = Math.min(currentFrame, ref.speeds.length-1);
+        markerS.setLatLng([ref.coords[rIdx][0]+latOffset, ref.coords[rIdx][1]+lonOffset]);
+        const rs = calculateSectors(ref);
         document.getElementById('s-lap-id').innerText = secondaryIdx;
-        document.getElementById('s-spd').innerText = Math.round(s.speeds[sIdx]);
-        document.getElementById('s-rpm').innerText = s.rpms[sIdx];
-        document.getElementById('s-s1').innerText = sS.s1; document.getElementById('s-s2').innerText = sS.s2;
-        document.getElementById('s-s3').innerText = sS.s3; document.getElementById('s-s4').innerText = sS.s4;
-        if(lineAIdx!==null && lineBIdx!==null) document.getElementById('s-ab').innerText = Math.abs(s.times[sIdx]-s.times[lineAIdx]).toFixed(3) + "s";
-        document.getElementById('delta-val').innerText = (p.times[idx] - s.times[sIdx]).toFixed(3) + "s";
+        document.getElementById('s-spd').innerText = Math.round(ref.speeds[rIdx]);
+        document.getElementById('s-rpm').innerText = ref.rpms[rIdx];
+        document.getElementById('s-s1').innerText = rs.s1===999?'--':rs.s1.toFixed(3);
+        document.getElementById('s-s2').innerText = rs.s2===999?'--':rs.s2.toFixed(3);
+        document.getElementById('s-s3').innerText = rs.s3===999?'--':rs.s3.toFixed(3);
+        document.getElementById('s-s4').innerText = rs.s4===999?'--':rs.s4.toFixed(3);
+        document.getElementById('delta-val').innerText = (p.times[idx] - ref.times[rIdx]).toFixed(3) + "s";
     }
     if(mainChart){ mainChart.options.plugins.annotation.annotations.now.xMin=idx; mainChart.options.plugins.annotation.annotations.now.xMax=idx; mainChart.update('none'); }
 }
 
 document.getElementById('openListBtn').onclick = () => document.getElementById('lap-list-overlay').style.display='flex';
-document.getElementById('setLineA').onclick = () => { lineAIdx = currentFrame; updateFrame(); };
-document.getElementById('setLineB').onclick = () => { lineBIdx = currentFrame; updateFrame(); };
+document.getElementById('setLineA').onclick = () => { lineAIdx = currentFrame; alert("A-Point Saved"); };
 document.getElementById('seek-bar').oninput = () => { currentFrame = parseInt(document.getElementById('seek-bar').value); updateFrame(); };
 document.getElementById('playBtn').onclick = function() { isPlaying = !isPlaying; this.innerText = isPlaying ? "PAUSE" : "PLAY"; if(isPlaying) animate(); };
 function animate() { if(!isPlaying) return; if(currentFrame >= lapDataStore[primaryIdx].speeds.length-1) { isPlaying=false; document.getElementById('playBtn').innerText="PLAY"; return; } currentFrame++; document.getElementById('seek-bar').value = currentFrame; updateFrame(); requestAnimationFrame(animate); }
