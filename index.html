@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>KLAP ANALYZER V12.1.2</title>
+    <title>KLAP ANALYZER V12.1.4</title>
      <link rel="manifest" href="/manifest.json">  
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -16,7 +16,7 @@
         #map { width: 35%; height: 100%; border-right: 1px solid #444; background: #111; position: relative; z-index: 1; }
         #chart-area { width: 65%; height: 100%; background: #000; position: relative; z-index: 1; }
 
-        /* Dashboard (Fixed & Draggable) */
+        /* Dashboard Fixed for Dragging */
         #data-dashboard { 
             position: fixed; 
             z-index: 9999; 
@@ -25,6 +25,9 @@
             border: 2px solid #666; 
             min-width: 180px; 
             touch-action: none;
+            /* 初期位置は右上に配置 */
+            top: 20px;
+            right: 20px;
         }
         .panel-header { 
             background: #333; 
@@ -36,6 +39,7 @@
             border-radius: 6px 6px 0 0; 
             user-select: none;
             font-weight: bold;
+            border-bottom: 1px solid #444;
         }
 
         #dash-content { padding: 10px; font-family: 'Courier New', monospace; font-size: 11px; pointer-events: none; }
@@ -43,22 +47,18 @@
         .grid-label { text-align: left; color: #888; min-width: 50px; }
         .comp-only { display: none; }
 
-        /* Map Controls */
         #map-adjust-ctrls { position: absolute; bottom: 20px; left: 10px; z-index: 1000; display: grid; grid-template-columns: repeat(3, 40px); gap: 5px; }
-        .adj-btn { width: 40px; height: 40px; background: rgba(0,0,0,0.8); color: white; border: 1px solid #fff; border-radius: 5px; cursor: pointer; }
+        .adj-btn { width: 40px; height: 40px; background: rgba(0,0,0,0.8); color: white; border: 1px solid #fff; border-radius: 5px; cursor: pointer; font-weight: bold; }
 
-        /* Lap List Overlay */
         #lap-list-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.98); z-index: 10000; flex-direction: column; padding: 15px; box-sizing: border-box; }
         #lap-list-content { overflow-y: auto; margin-top: 10px; border-top: 1px solid #333; }
         .lap-row { display: grid; grid-template-columns: 40px repeat(4, 1fr) 1.2fr 0.8fr 0.8fr; gap: 2px; padding: 12px 2px; border-bottom: 1px solid #222; cursor: pointer; text-align: center; font-size: 11px; color: #fff; }
         .lap-row.sel-p { background: rgba(51, 204, 255, 0.2); outline: 1px solid var(--hrc-blue); }
         .lap-row.sel-s { background: rgba(255, 68, 68, 0.2); outline: 1px solid var(--hrc-red); }
         
-        /* Highlight Best Values */
         .val-best { color: var(--hrc-purple) !important; font-weight: bold; }
         .lap-best { color: var(--hrc-red) !important; font-weight: bold; }
         .stat-best { background: var(--hrc-orange); color: #000 !important; font-weight: bold; border-radius: 2px; }
-
         .line-label { background: rgba(0,0,0,0.8); color: #fff; border: 1px solid #fff; padding: 2px 4px; font-size: 10px; border-radius: 3px; }
 
         #controls { position: fixed; bottom: 0; left: 0; width: 100%; height: 105px; background: #111; z-index: 999; padding: 5px; box-sizing: border-box; }
@@ -79,7 +79,7 @@
         </div>
     </div>
     <div id="chart-area">
-        <div id="data-dashboard" style="top:20px; right:20px;">
+        <div id="data-dashboard">
             <div class="panel-header" id="dash-handle">✜ DRAG HERE</div>
             <div id="dash-content">
                 <div class="dash-grid" id="dash-header" style="font-weight:bold; border-bottom:1px solid #444; padding-bottom:5px;">
@@ -130,11 +130,9 @@ let primaryIdx = 0, secondaryIdx = null, autoLines = {}, idxA = null, idxB = nul
 let latOffset = 0, lonOffset = 0;
 
 window.onload = () => {
-    // 地図タイルのURLを修正
     map = L.map('map', { zoomControl: false, maxZoom: 22 }).setView([35.68, 139.76], 15);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { 
-        maxZoom: 22, 
-        attribution: '© OpenStreetMap' 
+        maxZoom: 22, attribution: '© OpenStreetMap' 
     }).addTo(map);
     
     markerP = L.circleMarker([0,0], {color:'#33ccff', fillColor:'#000', radius:7, fillOpacity:1, weight:3}).addTo(map);
@@ -142,26 +140,50 @@ window.onload = () => {
     makeDraggable(document.getElementById('data-dashboard'), document.getElementById('dash-handle'));
 };
 
+// --- Improved Drag Logic (Fixes the Stretching issue) ---
 function makeDraggable(el, handle) {
     let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
     handle.onmousedown = dragStart;
     handle.ontouchstart = dragStart;
+
     function dragStart(e) {
-        e = e || window.event; e.preventDefault();
-        pos3 = e.clientX || e.touches[0].clientX;
-        pos4 = e.clientY || e.touches[0].clientY;
-        document.onmouseup = dragEnd; document.ontouchend = dragEnd;
-        document.onmousemove = dragMove; document.ontouchmove = dragMove;
+        e = e || window.event;
+        e.preventDefault();
+        
+        // 重要：ドラッグ開始時に現在位置を確定し、右端固定を解除する
+        const rect = el.getBoundingClientRect();
+        el.style.right = 'auto'; 
+        el.style.left = rect.left + 'px';
+        el.style.top = rect.top + 'px';
+
+        pos3 = e.clientX || (e.touches ? e.touches[0].clientX : 0);
+        pos4 = e.clientY || (e.touches ? e.touches[0].clientY : 0);
+        
+        document.onmouseup = dragEnd;
+        document.ontouchend = dragEnd;
+        document.onmousemove = dragMove;
+        document.ontouchmove = dragMove;
     }
+
     function dragMove(e) {
-        let cx = e.clientX || e.touches[0].clientX;
-        let cy = e.clientY || e.touches[0].clientY;
-        pos1 = pos3 - cx; pos2 = pos4 - cy;
-        pos3 = cx; pos4 = cy;
+        let cx = e.clientX || (e.touches ? e.touches[0].clientX : 0);
+        let cy = e.clientY || (e.touches ? e.touches[0].clientY : 0);
+        
+        pos1 = pos3 - cx;
+        pos2 = pos4 - cy;
+        pos3 = cx;
+        pos4 = cy;
+        
         el.style.top = (el.offsetTop - pos2) + "px";
         el.style.left = (el.offsetLeft - pos1) + "px";
     }
-    function dragEnd() { document.onmouseup = null; document.onmousemove = null; document.ontouchend = null; document.ontouchmove = null; }
+
+    function dragEnd() {
+        document.onmouseup = null;
+        document.onmousemove = null;
+        document.ontouchend = null;
+        document.ontouchmove = null;
+    }
 }
 
 function adjustMap(dLat, dLon) { latOffset += dLat; lonOffset += dLon; updateUI(); }
@@ -320,7 +342,7 @@ function createCharts() {
 }
 
 function updateFrame() {
-    if (primaryIdx === null) return;
+    if (primaryIdx === null || lapDataStore.length === 0) return;
     const p = lapDataStore[primaryIdx]; const idx = Math.min(currentFrame, p.speeds.length-1);
     markerP.setLatLng([p.coords[idx][0]+latOffset, p.coords[idx][1]+lonOffset]);
     const s = calculateSectors(p);
