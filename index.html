@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>KLAP ANALYZER V12.1.0</title>
+    <title>KLAP ANALYZER V12.1.1</title>
      <link rel="manifest" href="/manifest.json">  
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -13,24 +13,45 @@
         :root { --hrc-red: #ff4444; --hrc-blue: #33ccff; --hrc-purple: #e040fb; --hrc-orange: #ff9900; --hrc-yellow: #ffff00; }
         html, body { overflow: hidden; width: 100%; height: 100%; background: #000; margin: 0; padding: 0; font-family: sans-serif; color: #fff; }
         #main-container { display: flex; height: calc(100vh - 105px); width: 100%; }
-        #map { width: 35%; height: 100%; border-right: 1px solid #444; background: #222; position: relative; }
-        #chart-area { width: 65%; height: 100%; background: #000; position: relative; }
+        #map { width: 35%; height: 100%; border-right: 1px solid #444; background: #222; position: relative; z-index: 1; }
+        #chart-area { width: 65%; height: 100%; background: #000; position: relative; z-index: 1; }
 
-        /* 地図調整ボタン */
-        #map-adjust-ctrls { position: absolute; bottom: 20px; left: 10px; z-index: 1000; display: grid; grid-template-columns: repeat(3, 40px); gap: 5px; }
-        .adj-btn { width: 40px; height: 40px; background: rgba(0,0,0,0.8); color: white; border: 1px solid #fff; border-radius: 5px; cursor: pointer; font-weight: bold; }
+        /* --- DASHBOARD DRAG FIX --- */
+        #data-dashboard { 
+            position: fixed; /* absoluteからfixedに変更し、スタックコンテキストを分離 */
+            z-index: 99999; /* 地図やグラフより絶対的に上 */
+            background: rgba(0,0,0,0.9); 
+            border-radius: 8px; 
+            border: 2px solid #888; 
+            min-width: 180px; 
+            box-shadow: 0 0 20px rgba(0,0,0,0.8);
+            touch-action: none; /* ブラウザのデフォルトスクロールを防止 */
+        }
+        .panel-header { 
+            background: #444; 
+            color: #fff; 
+            font-size: 11px; 
+            padding: 12px; 
+            text-align: center; 
+            cursor: move; 
+            border-radius: 6px 6px 0 0; 
+            user-select: none;
+            font-weight: bold;
+            border-bottom: 1px solid #666;
+        }
+        /* -------------------------- */
 
-        /* Dashboard (絶対座標ドラッグ) */
-        #data-dashboard { position: absolute; z-index: 5000; background: rgba(0,0,0,0.9); border-radius: 8px; border: 1.5px solid #666; min-width: 170px; }
-        .panel-header { background: #333; color: #fff; font-size: 11px; padding: 10px; text-align: center; cursor: grab; border-radius: 8px 8px 0 0; user-select: none; }
-        .panel-header:active { cursor: grabbing; }
         #dash-content { padding: 10px; font-family: 'Courier New', monospace; font-size: 11px; pointer-events: none; }
         .dash-grid { display: grid; gap: 8px; text-align: right; margin-bottom: 4px; align-items: center; }
         .grid-label { text-align: left; color: #888; min-width: 50px; }
         .comp-only { display: none; }
 
+        /* 地図調整ボタン */
+        #map-adjust-ctrls { position: absolute; bottom: 20px; left: 10px; z-index: 1000; display: grid; grid-template-columns: repeat(3, 40px); gap: 5px; }
+        .adj-btn { width: 40px; height: 40px; background: rgba(0,0,0,0.8); color: white; border: 1px solid #fff; border-radius: 5px; cursor: pointer; font-weight: bold; }
+
         /* ラップリスト */
-        #lap-list-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.98); z-index: 10000; flex-direction: column; padding: 15px; box-sizing: border-box; }
+        #lap-list-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.98); z-index: 100000; flex-direction: column; padding: 15px; box-sizing: border-box; }
         #lap-list-content { overflow-y: auto; margin-top: 10px; border-top: 1px solid #333; }
         .lap-row { display: grid; grid-template-columns: 40px repeat(4, 1fr) 1.2fr 0.8fr 0.8fr; gap: 2px; padding: 12px 2px; border-bottom: 1px solid #222; cursor: pointer; text-align: center; font-size: 11px; color: #fff; }
         .lap-row.sel-p { background: rgba(51, 204, 255, 0.2); outline: 1px solid var(--hrc-blue); }
@@ -39,7 +60,6 @@
         .lap-best { color: var(--hrc-red) !important; font-weight: bold; }
         .stat-best { background: var(--hrc-orange); color: #000 !important; font-weight: bold; border-radius: 2px; }
 
-        /* 地図ラベル */
         .line-label { background: rgba(0,0,0,0.8); color: #fff; border: 1px solid #fff; padding: 2px 4px; font-size: 10px; border-radius: 3px; }
 
         #controls { position: fixed; bottom: 0; left: 0; width: 100%; height: 105px; background: #111; z-index: 999; padding: 5px; box-sizing: border-box; }
@@ -60,8 +80,8 @@
         </div>
     </div>
     <div id="chart-area">
-        <div id="data-dashboard" style="top:10px; right:10px;">
-            <div class="panel-header" id="dash-handle">✜ DRAG TO MOVE DASHBOARD</div>
+        <div id="data-dashboard" style="top:20px; right:20px;">
+            <div class="panel-header" id="dash-handle">✜ DRAG HERE</div>
             <div id="dash-content">
                 <div class="dash-grid" id="dash-header" style="font-weight:bold; border-bottom:1px solid #444; padding-bottom:5px;">
                     <span class="grid-label">ITEM</span><span id="label-p">DATA</span><span id="label-s" class="comp-only">REF</span>
@@ -112,37 +132,52 @@ let latOffset = 0, lonOffset = 0;
 
 window.onload = () => {
     map = L.map('map', { zoomControl: false, maxZoom: 22 }).setView([35.68, 139.76], 15);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 22 }).addTo(map);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{y}/{y}.png', { maxZoom: 22, opacity: 0.8 }).addTo(map);
     markerP = L.circleMarker([0,0], {color:'#33ccff', fillColor:'#000', radius:7, fillOpacity:1, weight:3}).addTo(map);
     markerS = L.circleMarker([0,0], {color:'#ff4444', fillColor:'#000', radius:7, fillOpacity:1, weight:3}).addTo(map);
-    initDashboardDrag();
+    makeDraggable(document.getElementById('data-dashboard'), document.getElementById('dash-handle'));
 };
 
-// Dashboard ドラッグ機能 (完全修正版)
-function initDashboardDrag() {
-    const dash = document.getElementById('data-dashboard');
-    const handle = document.getElementById('dash-handle');
-    let isDragging = false, offset = { x: 0, y: 0 };
+// --- 改良版ドラッグエンジン ---
+function makeDraggable(el, handle) {
+    let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
+    handle.onmousedown = dragMouseDown;
+    handle.ontouchstart = dragMouseDown;
 
-    handle.addEventListener('mousedown', (e) => {
-        isDragging = true;
-        offset.x = e.clientX - dash.offsetLeft;
-        offset.y = e.clientY - dash.offsetTop;
-        handle.style.cursor = 'grabbing';
-    });
+    function dragMouseDown(e) {
+        e = e || window.event;
+        e.preventDefault();
+        // マウスとタッチ両対応
+        pos3 = e.clientX || e.touches[0].clientX;
+        pos4 = e.clientY || e.touches[0].clientY;
+        document.onmouseup = closeDragElement;
+        document.ontouchend = closeDragElement;
+        document.onmousemove = elementDrag;
+        document.ontouchmove = elementDrag;
+    }
 
-    document.addEventListener('mousemove', (e) => {
-        if (!isDragging) return;
-        dash.style.left = (e.clientX - offset.x) + 'px';
-        dash.style.top = (e.clientY - offset.y) + 'px';
-    });
+    function elementDrag(e) {
+        e = e || window.event;
+        let clientX = e.clientX || e.touches[0].clientX;
+        let clientY = e.clientY || e.touches[0].clientY;
+        pos1 = pos3 - clientX;
+        pos2 = pos4 - clientY;
+        pos3 = clientX;
+        pos4 = clientY;
+        el.style.top = (el.offsetTop - pos2) + "px";
+        el.style.left = (el.offsetLeft - pos1) + "px";
+        el.style.right = 'auto'; // 右端固定を解除
+    }
 
-    document.addEventListener('mouseup', () => {
-        isDragging = false;
-        handle.style.cursor = 'grab';
-    });
+    function closeDragElement() {
+        document.onmouseup = null;
+        document.ontouchend = null;
+        document.onmousemove = null;
+        document.ontouchmove = null;
+    }
 }
 
+// --- GPS・データ処理 ---
 function adjustMap(dLat, dLon) { latOffset += dLat; lonOffset += dLon; updateUI(); }
 
 document.getElementById('fileBtn').onclick = () => document.getElementById('fileInput').click();
@@ -321,7 +356,6 @@ function updateFrame() {
     document.getElementById('p-s3').innerText = s.s3===999?'--':s.s3.toFixed(3);
     document.getElementById('p-s4').innerText = s.s4===999?'--':s.s4.toFixed(3);
 
-    // A-B区間計算
     if (idxA !== null && idxB !== null) {
         document.getElementById('p-ab').innerText = Math.abs(p.times[idxB] - p.times[idxA]).toFixed(3) + "s";
     }
