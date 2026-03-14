@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>KLAP ANALYZER V12.1.1</title>
+    <title>KLAP ANALYZER V12.1.2</title>
      <link rel="manifest" href="/manifest.json">  
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -13,49 +13,48 @@
         :root { --hrc-red: #ff4444; --hrc-blue: #33ccff; --hrc-purple: #e040fb; --hrc-orange: #ff9900; --hrc-yellow: #ffff00; }
         html, body { overflow: hidden; width: 100%; height: 100%; background: #000; margin: 0; padding: 0; font-family: sans-serif; color: #fff; }
         #main-container { display: flex; height: calc(100vh - 105px); width: 100%; }
-        #map { width: 35%; height: 100%; border-right: 1px solid #444; background: #222; position: relative; z-index: 1; }
+        #map { width: 35%; height: 100%; border-right: 1px solid #444; background: #111; position: relative; z-index: 1; }
         #chart-area { width: 65%; height: 100%; background: #000; position: relative; z-index: 1; }
 
-        /* --- DASHBOARD DRAG FIX --- */
+        /* Dashboard (Fixed & Draggable) */
         #data-dashboard { 
-            position: fixed; /* absoluteからfixedに変更し、スタックコンテキストを分離 */
-            z-index: 99999; /* 地図やグラフより絶対的に上 */
+            position: fixed; 
+            z-index: 9999; 
             background: rgba(0,0,0,0.9); 
             border-radius: 8px; 
-            border: 2px solid #888; 
+            border: 2px solid #666; 
             min-width: 180px; 
-            box-shadow: 0 0 20px rgba(0,0,0,0.8);
-            touch-action: none; /* ブラウザのデフォルトスクロールを防止 */
+            touch-action: none;
         }
         .panel-header { 
-            background: #444; 
+            background: #333; 
             color: #fff; 
             font-size: 11px; 
-            padding: 12px; 
+            padding: 10px; 
             text-align: center; 
             cursor: move; 
             border-radius: 6px 6px 0 0; 
             user-select: none;
             font-weight: bold;
-            border-bottom: 1px solid #666;
         }
-        /* -------------------------- */
 
         #dash-content { padding: 10px; font-family: 'Courier New', monospace; font-size: 11px; pointer-events: none; }
         .dash-grid { display: grid; gap: 8px; text-align: right; margin-bottom: 4px; align-items: center; }
         .grid-label { text-align: left; color: #888; min-width: 50px; }
         .comp-only { display: none; }
 
-        /* 地図調整ボタン */
+        /* Map Controls */
         #map-adjust-ctrls { position: absolute; bottom: 20px; left: 10px; z-index: 1000; display: grid; grid-template-columns: repeat(3, 40px); gap: 5px; }
-        .adj-btn { width: 40px; height: 40px; background: rgba(0,0,0,0.8); color: white; border: 1px solid #fff; border-radius: 5px; cursor: pointer; font-weight: bold; }
+        .adj-btn { width: 40px; height: 40px; background: rgba(0,0,0,0.8); color: white; border: 1px solid #fff; border-radius: 5px; cursor: pointer; }
 
-        /* ラップリスト */
-        #lap-list-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.98); z-index: 100000; flex-direction: column; padding: 15px; box-sizing: border-box; }
+        /* Lap List Overlay */
+        #lap-list-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.98); z-index: 10000; flex-direction: column; padding: 15px; box-sizing: border-box; }
         #lap-list-content { overflow-y: auto; margin-top: 10px; border-top: 1px solid #333; }
         .lap-row { display: grid; grid-template-columns: 40px repeat(4, 1fr) 1.2fr 0.8fr 0.8fr; gap: 2px; padding: 12px 2px; border-bottom: 1px solid #222; cursor: pointer; text-align: center; font-size: 11px; color: #fff; }
         .lap-row.sel-p { background: rgba(51, 204, 255, 0.2); outline: 1px solid var(--hrc-blue); }
         .lap-row.sel-s { background: rgba(255, 68, 68, 0.2); outline: 1px solid var(--hrc-red); }
+        
+        /* Highlight Best Values */
         .val-best { color: var(--hrc-purple) !important; font-weight: bold; }
         .lap-best { color: var(--hrc-red) !important; font-weight: bold; }
         .stat-best { background: var(--hrc-orange); color: #000 !important; font-weight: bold; border-radius: 2px; }
@@ -131,53 +130,40 @@ let primaryIdx = 0, secondaryIdx = null, autoLines = {}, idxA = null, idxB = nul
 let latOffset = 0, lonOffset = 0;
 
 window.onload = () => {
+    // 地図タイルのURLを修正
     map = L.map('map', { zoomControl: false, maxZoom: 22 }).setView([35.68, 139.76], 15);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{y}/{y}.png', { maxZoom: 22, opacity: 0.8 }).addTo(map);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { 
+        maxZoom: 22, 
+        attribution: '© OpenStreetMap' 
+    }).addTo(map);
+    
     markerP = L.circleMarker([0,0], {color:'#33ccff', fillColor:'#000', radius:7, fillOpacity:1, weight:3}).addTo(map);
     markerS = L.circleMarker([0,0], {color:'#ff4444', fillColor:'#000', radius:7, fillOpacity:1, weight:3}).addTo(map);
     makeDraggable(document.getElementById('data-dashboard'), document.getElementById('dash-handle'));
 };
 
-// --- 改良版ドラッグエンジン ---
 function makeDraggable(el, handle) {
     let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
-    handle.onmousedown = dragMouseDown;
-    handle.ontouchstart = dragMouseDown;
-
-    function dragMouseDown(e) {
-        e = e || window.event;
-        e.preventDefault();
-        // マウスとタッチ両対応
+    handle.onmousedown = dragStart;
+    handle.ontouchstart = dragStart;
+    function dragStart(e) {
+        e = e || window.event; e.preventDefault();
         pos3 = e.clientX || e.touches[0].clientX;
         pos4 = e.clientY || e.touches[0].clientY;
-        document.onmouseup = closeDragElement;
-        document.ontouchend = closeDragElement;
-        document.onmousemove = elementDrag;
-        document.ontouchmove = elementDrag;
+        document.onmouseup = dragEnd; document.ontouchend = dragEnd;
+        document.onmousemove = dragMove; document.ontouchmove = dragMove;
     }
-
-    function elementDrag(e) {
-        e = e || window.event;
-        let clientX = e.clientX || e.touches[0].clientX;
-        let clientY = e.clientY || e.touches[0].clientY;
-        pos1 = pos3 - clientX;
-        pos2 = pos4 - clientY;
-        pos3 = clientX;
-        pos4 = clientY;
+    function dragMove(e) {
+        let cx = e.clientX || e.touches[0].clientX;
+        let cy = e.clientY || e.touches[0].clientY;
+        pos1 = pos3 - cx; pos2 = pos4 - cy;
+        pos3 = cx; pos4 = cy;
         el.style.top = (el.offsetTop - pos2) + "px";
         el.style.left = (el.offsetLeft - pos1) + "px";
-        el.style.right = 'auto'; // 右端固定を解除
     }
-
-    function closeDragElement() {
-        document.onmouseup = null;
-        document.ontouchend = null;
-        document.onmousemove = null;
-        document.ontouchmove = null;
-    }
+    function dragEnd() { document.onmouseup = null; document.onmousemove = null; document.ontouchend = null; document.ontouchmove = null; }
 }
 
-// --- GPS・データ処理 ---
 function adjustMap(dLat, dLon) { latOffset += dLat; lonOffset += dLon; updateUI(); }
 
 document.getElementById('fileBtn').onclick = () => document.getElementById('fileInput').click();
@@ -298,7 +284,6 @@ function updateUI() {
     document.getElementById('seek-bar').max = p.speeds.length - 1;
     if (window.pathLayer) map.removeLayer(window.pathLayer);
     const g = L.featureGroup();
-
     const maxS = Math.max(...p.speeds);
     for(let i=1; i<p.coords.length; i++) {
         const ratio = p.speeds[i] / (maxS || 1);
@@ -306,13 +291,11 @@ function updateUI() {
         L.polyline([[p.coords[i-1][0]+latOffset, p.coords[i-1][1]+lonOffset],[p.coords[i][0]+latOffset, p.coords[i][1]+lonOffset]], {color, weight:4}).addTo(g);
     }
     if(secondaryIdx !== null) L.polyline(lapDataStore[secondaryIdx].coords.map(c=>[c[0]+latOffset, c[1]+lonOffset]), {color:'#ff4444', weight:2, dashArray:'5,5', opacity:0.6}).addTo(g);
-    
     Object.keys(autoLines).forEach(key => {
         const line = autoLines[key];
         L.polyline([[line.p1.lat+latOffset, line.p1.lon+lonOffset], [line.p2.lat+latOffset, line.p2.lon+lonOffset]], {color:key==='SL'?'#fff':'#ff0', weight:2})
          .addTo(g).bindTooltip(key, {permanent:true, className:'line-label', direction:'center'});
     });
-
     window.pathLayer = g.addTo(map); 
     if(!window.isMapInit) { map.fitBounds(g.getBounds()); window.isMapInit=true; }
     createCharts(); updateFrame();
@@ -320,23 +303,16 @@ function updateUI() {
 
 function createCharts() {
     const p = lapDataStore[primaryIdx];
-    const datasets = [
-        { label:'SPD P', data:p.speeds, borderColor:'#33ccff', pointRadius:0, yAxisID:'y', borderWidth:3 },
-        { label:'RPM P', data:p.rpms, borderColor:'rgba(0,255,0,0.6)', pointRadius:0, yAxisID:'y1', borderDash:[2,2] }
-    ];
+    const datasets = [{ label:'SPD P', data:p.speeds, borderColor:'#33ccff', pointRadius:0, yAxisID:'y', borderWidth:3 },{ label:'RPM P', data:p.rpms, borderColor:'rgba(0,255,0,0.6)', pointRadius:0, yAxisID:'y1', borderDash:[2,2] }];
     if (secondaryIdx !== null) {
         const s = lapDataStore[secondaryIdx];
         datasets.push({ label:'SPD S', data:s.speeds, borderColor:'#ff4444', pointRadius:0, yAxisID:'y', borderWidth:3 });
         datasets.push({ label:'RPM S', data:s.rpms, borderColor:'rgba(255,165,0,0.6)', pointRadius:0, yAxisID:'y1', borderDash:[2,2] });
     }
     if (mainChart) mainChart.destroy();
-    
-    const annotations = {
-        now: { type: 'line', xMin: currentFrame, xMax: currentFrame, borderColor: '#fff', borderWidth: 2 }
-    };
+    const annotations = { now: { type: 'line', xMin: currentFrame, xMax: currentFrame, borderColor: '#fff', borderWidth: 2 } };
     if (idxA !== null) annotations.lineA = { type: 'line', xMin: idxA, xMax: idxA, borderColor: '#ffff00', borderWidth: 1, borderDash: [5, 5] };
     if (idxB !== null) annotations.lineB = { type: 'line', xMin: idxB, xMax: idxB, borderColor: '#ffff00', borderWidth: 1, borderDash: [5, 5] };
-
     mainChart = new Chart(document.getElementById('mainChart').getContext('2d'), {
         type:'line', data:{ labels:p.times.map((_,i)=>i), datasets },
         options:{ responsive:true, maintainAspectRatio:false, animation:false, scales:{ x:{display:false}, y:{position:'left', min:0}, y1:{position:'right', min:0, grid:{display:false}} }, plugins:{ legend:{display:false}, annotation:{ annotations } } }
@@ -355,11 +331,7 @@ function updateFrame() {
     document.getElementById('p-s2').innerText = s.s2===999?'--':s.s2.toFixed(3);
     document.getElementById('p-s3').innerText = s.s3===999?'--':s.s3.toFixed(3);
     document.getElementById('p-s4').innerText = s.s4===999?'--':s.s4.toFixed(3);
-
-    if (idxA !== null && idxB !== null) {
-        document.getElementById('p-ab').innerText = Math.abs(p.times[idxB] - p.times[idxA]).toFixed(3) + "s";
-    }
-
+    if (idxA !== null && idxB !== null) document.getElementById('p-ab').innerText = Math.abs(p.times[idxB] - p.times[idxA]).toFixed(3) + "s";
     if (secondaryIdx !== null) {
         const ref = lapDataStore[secondaryIdx]; const rIdx = Math.min(currentFrame, ref.speeds.length-1);
         markerS.setLatLng([ref.coords[rIdx][0]+latOffset, ref.coords[rIdx][1]+lonOffset]);
@@ -372,9 +344,7 @@ function updateFrame() {
         document.getElementById('s-s3').innerText = rs.s3===999?'--':rs.s3.toFixed(3);
         document.getElementById('s-s4').innerText = rs.s4===999?'--':rs.s4.toFixed(3);
         document.getElementById('delta-val').innerText = (p.times[idx] - ref.times[rIdx]).toFixed(3) + "s";
-        if (idxA !== null && idxB !== null) {
-            document.getElementById('s-ab').innerText = Math.abs(ref.times[idxB] - ref.times[idxA]).toFixed(3) + "s";
-        }
+        if (idxA !== null && idxB !== null) document.getElementById('s-ab').innerText = Math.abs(ref.times[idxB] - ref.times[idxA]).toFixed(3) + "s";
     }
     if(mainChart){ mainChart.options.plugins.annotation.annotations.now.xMin=idx; mainChart.options.plugins.annotation.annotations.now.xMax=idx; mainChart.update('none'); }
 }
