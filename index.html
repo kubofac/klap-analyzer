@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>KLAP ANALYZER V11.9.9</title>
+    <title>KLAP ANALYZER V12.0.0</title>
      <link rel="manifest" href="/manifest.json">  
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -15,28 +15,32 @@
         #main-container { display: flex; height: calc(100vh - 105px); width: 100%; }
         #map { width: 35%; height: 100%; border-right: 1px solid #444; background: #222; position: relative; }
         #chart-area { width: 65%; height: 100%; background: #000; position: relative; }
-        
-        /* Dashboard */
-        .draggable-panel { position: absolute; z-index: 5000; background: rgba(0,0,0,0.9); border-radius: 8px; border: 1.5px solid #666; width: auto; min-width: 160px; pointer-events: auto; }
-        .panel-header { background: #333; color: #fff; font-size: 11px; padding: 10px; text-align: center; cursor: move; border-radius: 8px 8px 0 0; user-select: none; }
+
+        /* 地図調整ボタン（復旧） */
+        #map-adjust-ctrls { position: absolute; bottom: 20px; left: 10px; z-index: 1000; display: grid; grid-template-columns: repeat(3, 40px); gap: 5px; }
+        .adj-btn { width: 40px; height: 40px; background: rgba(0,0,0,0.8); color: white; border: 1px solid #fff; border-radius: 5px; cursor: pointer; font-weight: bold; }
+
+        /* Dashboard (ドラッグ修正) */
+        #data-dashboard { position: absolute; z-index: 5000; background: rgba(0,0,0,0.9); border-radius: 8px; border: 1.5px solid #666; min-width: 160px; user-select: none; }
+        .panel-header { background: #333; color: #fff; font-size: 11px; padding: 10px; text-align: center; cursor: move; border-radius: 8px 8px 0 0; }
         #dash-content { padding: 10px; font-family: 'Courier New', monospace; font-size: 11px; pointer-events: none; }
         .dash-grid { display: grid; gap: 8px; text-align: right; margin-bottom: 4px; align-items: center; }
         .grid-label { text-align: left; color: #888; min-width: 50px; }
         .comp-only { display: none; }
 
-        /* Lap List Overlay (White Text, Clean Best Highlight) */
+        /* ラップリスト */
         #lap-list-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.98); z-index: 10000; flex-direction: column; padding: 15px; box-sizing: border-box; }
         #lap-list-content { overflow-y: auto; margin-top: 10px; border-top: 1px solid #333; }
-        .lap-row { display: grid; grid-template-columns: 40px repeat(4, 1fr) 1.2fr 0.8fr 0.8fr; gap: 2px; padding: 12px 2px; border-bottom: 1px solid #222; cursor: pointer; text-align: center; font-size: 11px; align-items: center; color: #fff; }
+        .lap-row { display: grid; grid-template-columns: 40px repeat(4, 1fr) 1.2fr 0.8fr 0.8fr; gap: 2px; padding: 12px 2px; border-bottom: 1px solid #222; cursor: pointer; text-align: center; font-size: 11px; color: #fff; }
         .lap-row.sel-p { background: rgba(51, 204, 255, 0.2); outline: 1px solid var(--hrc-blue); }
         .lap-row.sel-s { background: rgba(255, 68, 68, 0.2); outline: 1px solid var(--hrc-red); }
-        
-        /* ベスト値のハイライト */
-        .val-best { color: var(--hrc-purple) !important; font-weight: bold; } /* セクター最速：紫 */
-        .lap-best { color: var(--hrc-red) !important; font-weight: bold; font-size: 13px; } /* 周回最速：赤 */
-        .stat-best { background: var(--hrc-orange); color: #000 !important; font-weight: bold; border-radius: 2px; } /* MAX値：橙背景 */
-        
-        .list-header { background: #111; font-weight: bold; font-size: 10px; color: #555 !important; position: sticky; top: 0; z-index: 1; }
+        .val-best { color: var(--hrc-purple) !important; font-weight: bold; }
+        .lap-best { color: var(--hrc-red) !important; font-weight: bold; }
+        .stat-best { background: var(--hrc-orange); color: #000 !important; font-weight: bold; border-radius: 2px; }
+        .list-header { background: #111; color: #555 !important; font-weight: bold; font-size: 10px; position: sticky; top: 0; z-index: 1; }
+
+        /* 地図ラベル */
+        .line-label { background: rgba(0,0,0,0.8); color: #fff; border: 1px solid #fff; padding: 2px 4px; font-size: 10px; border-radius: 3px; }
 
         #controls { position: fixed; bottom: 0; left: 0; width: 100%; height: 105px; background: #111; z-index: 999; padding: 5px; box-sizing: border-box; }
         .ctrl-row { display: flex; align-items: center; gap: 5px; height: 45px; overflow-x: auto; }
@@ -47,10 +51,17 @@
 <body>
 
 <div id="main-container">
-    <div id="map"></div>
+    <div id="map">
+        <div id="map-adjust-ctrls">
+            <div style="grid-column: 2;"><button class="adj-btn" onclick="adjustMap(0.00001, 0)">↑</button></div>
+            <div style="grid-row: 2;"><button class="adj-btn" onclick="adjustMap(0, -0.00001)">←</button></div>
+            <div style="grid-row: 2;"><button class="adj-btn" onclick="adjustMap(-0.00001, 0)">↓</button></div>
+            <div style="grid-row: 2;"><button class="adj-btn" onclick="adjustMap(0, 0.00001)">→</button></div>
+        </div>
+    </div>
     <div id="chart-area">
-        <div id="data-dashboard" class="draggable-panel" style="top:10px; right:10px;">
-            <div class="panel-header" id="dash-handle">DRAG HERE TO MOVE</div>
+        <div id="data-dashboard" style="top:10px; right:10px;">
+            <div class="panel-header" id="dash-handle">DRAG TO MOVE</div>
             <div id="dash-content">
                 <div class="dash-grid" id="dash-header" style="font-weight:bold; border-bottom:1px solid #444; padding-bottom:5px;">
                     <span class="grid-label">ITEM</span><span id="label-p">DATA</span><span id="label-s" class="comp-only">REF</span>
@@ -87,7 +98,7 @@
 <div id="lap-list-overlay">
     <h3 style="text-align:center; color:#888;">LAP DATA HISTORY</h3>
     <div id="lap-list-content"></div>
-    <button class="mini-btn" style="margin-top:15px; width:100%; height:50px; background:var(--hrc-blue); font-size:16px;" onclick="closeLapList()">CLOSE LIST</button>
+    <button class="mini-btn" style="margin-top:15px; width:100%; height:50px; background:var(--hrc-blue); font-size:16px;" onclick="closeLapList()">LOAD ANALYSIS</button>
 </div>
 
 <script>
@@ -101,22 +112,27 @@ window.onload = () => {
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 22 }).addTo(map);
     markerP = L.circleMarker([0,0], {color:'#33ccff', fillColor:'#000', radius:7, fillOpacity:1, weight:3}).addTo(map);
     markerS = L.circleMarker([0,0], {color:'#ff4444', fillColor:'#000', radius:7, fillOpacity:1, weight:3}).addTo(map);
-    enableDragging(document.getElementById('data-dashboard'));
+    initDrag(document.getElementById('data-dashboard'));
 };
 
-function enableDragging(el) {
+// ドラッグ機能（再修正版）
+function initDrag(el) {
     const handle = document.getElementById('dash-handle');
     handle.onmousedown = (e) => {
-        let startX = e.clientX, startY = e.clientY;
-        const onMouseMove = (ev) => {
-            el.style.left = (el.offsetLeft + (ev.clientX - startX)) + "px";
-            el.style.top = (el.offsetTop + (ev.clientY - startY)) + "px";
-            startX = ev.clientX; startY = ev.clientY;
-        };
+        let shiftX = e.clientX - el.getBoundingClientRect().left;
+        let shiftY = e.clientY - el.getBoundingClientRect().top;
+        function moveAt(pageX, pageY) {
+            el.style.left = (pageX - shiftX) + 'px';
+            el.style.top = (pageY - shiftY) + 'px';
+        }
+        function onMouseMove(e) { moveAt(e.pageX, e.pageY); }
         document.addEventListener('mousemove', onMouseMove);
         document.onmouseup = () => { document.removeEventListener('mousemove', onMouseMove); document.onmouseup = null; };
     };
+    handle.ondragstart = () => false;
 }
+
+function adjustMap(dLat, dLon) { latOffset += dLat; lonOffset += dLon; updateUI(); }
 
 document.getElementById('fileBtn').onclick = () => document.getElementById('fileInput').click();
 document.getElementById('fileInput').onchange = e => {
@@ -135,7 +151,10 @@ function parseMeta(xml) {
         const match = desc.match(/LINE_DATA\[(.*?)\]/);
         if (match) match[1].split('|').forEach(item => {
             const [k, v] = item.split(':');
-            if (v && v!=="SKIP") { const c=v.split(',').map(Number); autoLines[k]={p1:{lat:c[0],lon:c[1]}, p2:{lat:c[2],lon:c[3]}}; }
+            if (v && v!=="SKIP") { 
+                const c = v.split(',').map(Number); 
+                autoLines[k] = { p1: {lat: c[0], lon: c[1]}, p2: {lat: c[2], lon: c[3]} }; 
+            }
         });
     }
 }
@@ -160,7 +179,7 @@ function processGPX(xml) {
             cur.speeds.push(dt > 0 ? (d/dt)*3.6 : 0);
         } else cur.speeds.push(0);
         if (i > 0 && autoLines.SL && getIntersect(allPoints[i-1], p, autoLines.SL)) {
-            if (p.time - lastSL > 10000) {
+            if (p.time - lastSL > 5000) {
                 cur.times = cur.rawTimes.map(t => (t - cur.rawTimes[0]) / 1000);
                 cur.duration = p.time - (lastSL || allPoints[0].time);
                 lapDataStore.push(cur);
@@ -198,7 +217,6 @@ function calculateSectors(lap) {
 function renderLapList() {
     const c = document.getElementById('lap-list-content');
     if(lapDataStore.length === 0) return;
-
     const lapsSectors = lapDataStore.map(l => calculateSectors(l));
     const bestS1 = Math.min(...lapsSectors.map(s => s.s1));
     const bestS2 = Math.min(...lapsSectors.map(s => s.s2));
@@ -209,30 +227,13 @@ function renderLapList() {
     const globalMaxR = Math.max(...lapDataStore.map(l => Math.max(...l.rpms)));
 
     c.innerHTML = `<div class="lap-row list-header"><span>LAP</span><span>S1</span><span>S2</span><span>S3</span><span>S4</span><span>TOTAL</span><span>MAX S</span><span>MAX R</span></div>`;
-    
     lapDataStore.forEach((l, i) => {
-        const s = lapsSectors[i];
-        const maxS = Math.max(...l.speeds);
-        const maxR = Math.max(...l.rpms);
+        const s = lapsSectors[i]; const maxS = Math.max(...l.speeds); const maxR = Math.max(...l.rpms);
         const div = document.createElement('div');
         div.className = `lap-row ${primaryIdx===i?'sel-p':''} ${secondaryIdx===i?'sel-s':''}`;
-        
         const wrapBest = (val, best) => `<span class="${val===best?'val-best':''}">${val===999?'--':val.toFixed(3)}</span>`;
-        
-        div.innerHTML = `
-            <span>L${i}</span>
-            ${wrapBest(s.s1, bestS1)} ${wrapBest(s.s2, bestS2)} ${wrapBest(s.s3, bestS3)} ${wrapBest(s.s4, bestS4)}
-            <span class="${l.duration===bestTotal?'lap-best':''}">${(l.duration/1000).toFixed(3)}s</span>
-            <span class="${maxS===globalMaxS?'stat-best':''}">${Math.round(maxS)}</span>
-            <span class="${maxR===globalMaxR?'stat-best':''}">${maxR}</span>
-        `;
-        div.onclick = () => {
-            if(primaryIdx===i) primaryIdx=null;
-            else if(secondaryIdx===i) secondaryIdx=null;
-            else if(primaryIdx===null) primaryIdx=i;
-            else secondaryIdx=i;
-            renderLapList();
-        };
+        div.innerHTML = `<span>L${i}</span>${wrapBest(s.s1, bestS1)}${wrapBest(s.s2, bestS2)}${wrapBest(s.s3, bestS3)}${wrapBest(s.s4, bestS4)}<span class="${l.duration===bestTotal?'lap-best':''}">${(l.duration/1000).toFixed(3)}s</span><span class="${maxS===globalMaxS?'stat-best':''}">${Math.round(maxS)}</span><span class="${maxR===globalMaxR?'stat-best':''}">${maxR}</span>`;
+        div.onclick = () => { if(primaryIdx===i) primaryIdx=null; else if(secondaryIdx===i) secondaryIdx=null; else if(primaryIdx===null) primaryIdx=i; else secondaryIdx=i; renderLapList(); };
         c.appendChild(div);
     });
 }
@@ -251,6 +252,8 @@ function updateUI() {
     document.getElementById('seek-bar').max = p.speeds.length - 1;
     if (window.pathLayer) map.removeLayer(window.pathLayer);
     const g = L.featureGroup();
+
+    // 走行ライン & 計測線ラベルの復旧
     const maxS = Math.max(...p.speeds);
     for(let i=1; i<p.coords.length; i++) {
         const ratio = p.speeds[i] / (maxS || 1);
@@ -258,7 +261,16 @@ function updateUI() {
         L.polyline([[p.coords[i-1][0]+latOffset, p.coords[i-1][1]+lonOffset],[p.coords[i][0]+latOffset, p.coords[i][1]+lonOffset]], {color, weight:4}).addTo(g);
     }
     if(secondaryIdx !== null) L.polyline(lapDataStore[secondaryIdx].coords.map(c=>[c[0]+latOffset, c[1]+lonOffset]), {color:'#ff4444', weight:2, dashArray:'5,5', opacity:0.6}).addTo(g);
-    window.pathLayer = g.addTo(map); map.fitBounds(g.getBounds());
+    
+    // 計測線の描画とラベル
+    Object.keys(autoLines).forEach(key => {
+        const line = autoLines[key];
+        L.polyline([[line.p1.lat+latOffset, line.p1.lon+lonOffset], [line.p2.lat+latOffset, line.p2.lon+lonOffset]], {color:key==='SL'?'#fff':'#ff0', weight:2})
+         .addTo(g).bindTooltip(key, {permanent:true, className:'line-label', direction:'center'});
+    });
+
+    window.pathLayer = g.addTo(map); 
+    if(!window.isMapInit) { map.fitBounds(g.getBounds()); window.isMapInit=true; }
     createCharts(); updateFrame();
 }
 
