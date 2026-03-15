@@ -216,33 +216,93 @@ function parseMeta(xml) {
 function processGPX(xml) {
     const pts = xml.getElementsByTagName('trkpt');
     let allPoints = [];
+    
     for (let i = 0; i < pts.length; i++) {
-        const lat = parseFloat(pts[i].getAttribute('lat')), lon = parseFloat(pts[i].getAttribute('lon')), time = new Date(pts[i].getElementsByTagName('time')[0].textContent).getTime();
-        let rpm = 0; const ext = pts[i].getElementsByTagName('extensions')[0];
-        if(ext) { const rTag = ext.getElementsByTagName('rpm')[0] || ext.getElementsByTagName('ns3:rpm')[0]; rpm = parseInt(rTag?.textContent || 0); }
-        allPoints.push({ lat, lon, time, rpm });
+        const lat = parseFloat(pts[i].getAttribute('lat'));
+        const lon = parseFloat(pts[i].getAttribute('lon'));
+        const timeStr = pts[i].getElementsByTagName('time')[0]?.textContent;
+        const time = timeStr ? new Date(timeStr).getTime() : 0;
+        
+        // 速度の取得（複数のタグ形式に対応）
+        let speed = NaN;
+        const speedTag = pts[i].getElementsByTagName('speed')[0];
+        if (speedTag) speed = parseFloat(speedTag.textContent);
+        
+        // Garmin等、拡張タグ内の速度も探しに行く
+        if (isNaN(speed)) {
+            const extensions = pts[i].getElementsByTagName('extensions')[0];
+            if (extensions) {
+                const extSpeed = extensions.getElementsByTagName('speed')[0];
+                if (extSpeed) speed = parseFloat(extSpeed.textContent);
+            }
+        }
+
+        // RPMの取得
+        let rpm = 0;
+        const ext = pts[i].getElementsByTagName('extensions')[0];
+        if(ext) {
+            const rTag = ext.getElementsByTagName('rpm')[0] || ext.getElementsByTagName('ns3:rpm')[0];
+            rpm = parseInt(rTag?.textContent || 0);
+        }
+        
+        allPoints.push({ lat, lon, time, rpm, speed });
     }
+
+    if (allPoints.length === 0) {
+        alert("有効なGPSデータが見つかりませんでした。");
+        return;
+    }
+
     lapDataStore = [];
     let cur = { coords:[], times:[], rpms:[], speeds:[], rawTimes:[] }, lastSL = 0;
+
     for (let i = 0; i < allPoints.length; i++) {
         const p = allPoints[i];
-        cur.coords.push([p.lat, p.lon]); cur.rpms.push(p.rpm); cur.rawTimes.push(p.time);
+        cur.coords.push([p.lat, p.lon]);
+        cur.rpms.push(p.rpm);
+        cur.rawTimes.push(p.time);
+
+        // 速度の確定（タグにない場合は距離から計算）
         if (cur.coords.length > 1) {
-            const d = L.latLng(cur.coords[cur.coords.length-2]).distanceTo([p.lat, p.lon]);
+            const p1 = L.latLng(cur.coords[cur.coords.length-2]);
+            const p2 = L.latLng(p.lat, p.lon);
+            const dist = p1.distanceTo(p2);
             const dt = (p.time - cur.rawTimes[cur.rawTimes.length-2]) / 1000;
-            cur.speeds.push(dt > 0 ? (d/dt)*3.6 : 0);
-        } else cur.speeds.push(0);
+            
+            // ファイルの速度がNaNなら計算値、あればファイル値を優先
+            const calculatedSpeed = dt > 0 ? (dist / dt) * 3.6 : 0;
+            cur.speeds.push(!isNaN(p.speed) && p.speed !== null ? p.speed * 3.6 : calculatedSpeed);
+        } else {
+            cur.speeds.push(0);
+        }
+
+        // スタートライン判定
         if (i > 0 && autoLines.SL && getIntersect(allPoints[i-1], p, autoLines.SL)) {
-            if (p.time - lastSL > 5000) {
+            if (p.time - lastSL > 5000) { // 5秒の不感帯
                 cur.times = cur.rawTimes.map(t => (t - cur.rawTimes[0]) / 1000);
                 cur.duration = p.time - (lastSL || allPoints[0].time);
                 lapDataStore.push(cur);
+                // 次のラップの初期化
                 cur = { coords:[[p.lat, p.lon]], times:[], rpms:[p.rpm], speeds:[0], rawTimes:[p.time] };
                 lastSL = p.time;
             }
         }
     }
-    renderLapList(); updateUI();
+
+    // ファイルの末尾に残ったデータも最後のラップとして追加（任意）
+    if (cur.coords.length > 10) {
+        cur.times = cur.rawTimes.map(t => (t - cur.rawTimes[0]) / 1000);
+        cur.duration = allPoints[allPoints.length-1].time - lastSL;
+        lapDataStore.push(cur);
+    }
+
+    renderLapList();
+    if (lapDataStore.length > 0) {
+        primaryIdx = 0;
+        updateUI();
+    } else {
+        alert("スタートラインを通過していないため、ラップを分割できませんでした。");
+    }
 }
 
 function getIntersect(p1, p2, line) {
