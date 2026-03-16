@@ -240,13 +240,16 @@ function processGPX(xml) {
         // RPMの取得
         let rpm = 0;
         const ext = pts[i].getElementsByTagName('extensions')[0];
-        if(ext) {
+    if(ext) {
             // rpm, ns3:rpm に加えて、DEGI版が出力する hr タグもRPMとして読み取る
-const rTag = ext.getElementsByTagName('rpm')[0] || ext.getElementsByTagName('ns3:rpm')[0] || ext.getElementsByTagName('hr')[0] || ext.getElementsByTagName('gpxtpx:hr')[0];
+            const rTag = ext.getElementsByTagName('rpm')[0] || 
+                         ext.getElementsByTagName('ns3:rpm')[0] || 
+                         ext.getElementsByTagName('hr')[0] || 
+                         ext.getElementsByTagName('gpxtpx:hr')[0];
+            
+            // 見つかったタグから数値を抽出し、rpm変数に格納
+            rpm = parseInt(rTag?.textContent || 0);
         }
-        
-        allPoints.push({ lat, lon, time, rpm, speed });
-    }
 
     if (allPoints.length === 0) {
         alert("有効なGPSデータが見つかりませんでした。");
