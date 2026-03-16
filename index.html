@@ -241,8 +241,8 @@ function processGPX(xml) {
         let rpm = 0;
         const ext = pts[i].getElementsByTagName('extensions')[0];
         if(ext) {
-            const rTag = ext.getElementsByTagName('rpm')[0] || ext.getElementsByTagName('ns3:rpm')[0];
-            rpm = parseInt(rTag?.textContent || 0);
+            // rpm, ns3:rpm に加えて、DEGI版が出力する hr タグもRPMとして読み取る
+const rTag = ext.getElementsByTagName('rpm')[0] || ext.getElementsByTagName('ns3:rpm')[0] || ext.getElementsByTagName('hr')[0] || ext.getElementsByTagName('gpxtpx:hr')[0];
         }
         
         allPoints.push({ lat, lon, time, rpm, speed });
