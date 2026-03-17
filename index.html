@@ -212,18 +212,40 @@ function parseMeta(xml) {
         });
     }
 }
+// --- 1. 方向判定ロジック（新規追加・修正） ---
+// getIntersectの後に実行し、通過ベクトルとライン法線の内積で向きを判定します
+function checkDirection(p1, p2, line) {
+    // まず交差しているか確認
+    if (!getIntersect(p1, p2, line)) return false;
 
+    // 走行ベクトル (V)
+    const vx = p2.lon - p1.lon;
+    const vy = p2.lat - p1.lat;
+
+    // ラインのベクトル (L)
+    const lx = line.p2.lon - line.p1.lon;
+    const ly = line.p2.lat - line.p1.lat;
+
+    // ラインを右に見た時の法線ベクトル (N)
+    // 数学的に垂直な向きを定義します
+    const nx = ly;
+    const ny = -lx;
+
+    // 内積 (V · N) を計算。正なら順走、負なら逆走。
+    return (vx * nx) + (vy * ny) > 0;
+}
+// --- 3. GPX解析・ラップ分割ロジック（修正版） ---
 function processGPX(xml) {
     const pts = xml.getElementsByTagName('trkpt');
     let allPoints = [];
     
+    // データ抽出ループ
     for (let i = 0; i < pts.length; i++) {
         const lat = parseFloat(pts[i].getAttribute('lat'));
         const lon = parseFloat(pts[i].getAttribute('lon'));
         const timeStr = pts[i].getElementsByTagName('time')[0]?.textContent;
         const time = timeStr ? new Date(timeStr).getTime() : 0;
         
-        // 速度の取得
         let speed = NaN;
         const speedTag = pts[i].getElementsByTagName('speed')[0];
         if (speedTag) speed = parseFloat(speedTag.textContent);
@@ -236,7 +258,7 @@ function processGPX(xml) {
             }
         }
 
-        // RPMの取得（ここがあなたの修正した部分です）
+        // RPM/HR取得
         let rpm = 0;
         const ext = pts[i].getElementsByTagName('extensions')[0];
         if (ext) {
@@ -244,19 +266,14 @@ function processGPX(xml) {
                          ext.getElementsByTagName('ns3:rpm')[0] || 
                          ext.getElementsByTagName('hr')[0] || 
                          ext.getElementsByTagName('gpxtpx:hr')[0];
-            
             rpm = parseInt(rTag?.textContent || 0);
         }
-
-        // 💡 非常に重要：取得したデータを配列に追加（ここが抜けると地図が出ません）
+        
+        // 解析用配列へ追加
         allPoints.push({ lat, lon, time, speed, rpm });
     }
 
-    // データが1件もなければ中断
-    if (allPoints.length === 0) {
-        alert("有効なGPSデータが見つかりませんでした。");
-        return;
-    }
+    if (allPoints.length === 0) return;
 
     // ラップ分割処理
     lapDataStore = [];
@@ -268,32 +285,32 @@ function processGPX(xml) {
         cur.rpms.push(p.rpm);
         cur.rawTimes.push(p.time);
 
-        // 速度の確定
+        // 速度計算
         if (cur.coords.length > 1) {
             const p1 = L.latLng(cur.coords[cur.coords.length-2]);
             const p2 = L.latLng(p.lat, p.lon);
             const dist = p1.distanceTo(p2);
             const dt = (p.time - cur.rawTimes[cur.rawTimes.length-2]) / 1000;
-            
             const calculatedSpeed = dt > 0 ? (dist / dt) * 3.6 : 0;
             cur.speeds.push(!isNaN(p.speed) && p.speed !== null ? p.speed * 3.6 : calculatedSpeed);
         } else {
             cur.speeds.push(0);
         }
 
-        // スタートライン判定
-        if (i > 0 && autoLines.SL && getIntersect(allPoints[i-1], p, autoLines.SL)) {
-            if (p.time - lastSL > 5000) { 
+        // --- 修正：checkDirectionを使用して「順方向の交差」のみを判定 ---
+        if (i > 0 && autoLines.SL && checkDirection(allPoints[i-1], p, autoLines.SL)) {
+            if (p.time - lastSL > 5000) { // 5秒の不感時間
                 cur.times = cur.rawTimes.map(t => (t - cur.rawTimes[0]) / 1000);
                 cur.duration = p.time - (lastSL || allPoints[0].time);
                 lapDataStore.push(cur);
+                // 次のラップの初期化
                 cur = { coords:[[p.lat, p.lon]], times:[], rpms:[p.rpm], speeds:[0], rawTimes:[p.time] };
                 lastSL = p.time;
             }
         }
     }
 
-    // 最後の端数データ
+    // 残りのデータを最後のラップとして処理
     if (cur.coords.length > 10) {
         cur.times = cur.rawTimes.map(t => (t - cur.rawTimes[0]) / 1000);
         cur.duration = allPoints[allPoints.length-1].time - lastSL;
@@ -303,11 +320,10 @@ function processGPX(xml) {
     renderLapList();
     if (lapDataStore.length > 0) {
         primaryIdx = 0;
-        updateUI(); // 💡 ここで地図が描画されます
-    } else {
-        alert("スタートラインを通過していないため、ラップを分割できませんでした。");
+        updateUI();
     }
 }
+// --- 2. 交差判定ロジック（既存） ---
 function getIntersect(p1, p2, line) {
     const x1=p1.lon, y1=p1.lat, x2=p2.lon, y2=p2.lat, x3=line.p1.lon, y3=line.p1.lat, x4=line.p2.lon, y4=line.p2.lat;
     const den = (y4-y3)*(x2-x1)-(x4-x3)*(y2-y1);
@@ -315,7 +331,6 @@ function getIntersect(p1, p2, line) {
     const ua = ((x4-x3)*(y1-y3)-(y4-y3)*(x1-x3))/den, ub = ((x2-x1)*(y1-y3)-(y2-y1)*(x1-x3))/den;
     return (ua >= 0 && ua <= 1 && ub >= 0 && ub <= 1);
 }
-
 function calculateSectors(lap) {
     let s1=null, s2=null, s3=null;
     for (let j = 1; j < lap.coords.length; j++) {
