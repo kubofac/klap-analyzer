@@ -130,13 +130,15 @@ let primaryIdx = 0, secondaryIdx = null, autoLines = {}, idxA = null, idxB = nul
 let latOffset = 0, lonOffset = 0;
 
 window.onload = () => {
-    map = L.map('map', { zoomControl: false, maxZoom: 22 }).setView([35.68, 139.76], 15);
+    // attributionControl: false を追加してデフォルトの大きな表示を消す
+    map = L.map('map', { zoomControl: false, maxZoom: 22, attributionControl: false }).setView([35.68, 139.76], 15);
     
-    // 衛星写真レイヤーに変更（コースが実写で見えるようになります）
     L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-        attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EBP, and the GIS User Community',
         maxZoom: 22
     }).addTo(map);
+
+    // 隅っこに小さく表示させる（邪魔にならない程度）
+    L.control.attribution({ prefix: 'Esri' }).addTo(map);
     
     markerP = L.circleMarker([0,0], {color:'#33ccff', fillColor:'#000', radius:7, fillOpacity:1, weight:3}).addTo(map);
     markerS = L.circleMarker([0,0], {color:'#ff4444', fillColor:'#000', radius:7, fillOpacity:1, weight:3}).addTo(map);
@@ -402,32 +404,34 @@ function closeLapList() {
 function updateUI() {
     if (primaryIdx === null) return;
     const p = lapDataStore[primaryIdx];
+    
+    // シークバーの最大値を現在のラップのデータ数に合わせる
     document.getElementById('seek-bar').max = p.speeds.length - 1;
+    
+    // 既存の描画レイヤーがあれば削除してリセット
     if (window.pathLayer) map.removeLayer(window.pathLayer);
     
     const g = L.featureGroup();
     
-    // --- 修正箇所：速度の動的レンジ設定 ---
-    // 停車時(5km/h以下)を除いた最低速度と最高速度を取得して、色の幅を最適化する
+    // --- 1. 速度レンジの動的最適化（色分けを鮮やかにする） ---
+    // 停車時(5km/h以下)を除いた移動中の最低速度と最高速度を取得
     const movingSpeeds = p.speeds.filter(s => s > 5);
     const maxS = Math.max(...p.speeds);
     const minS = movingSpeeds.length > 0 ? Math.min(...movingSpeeds) : 0;
     const range = maxS - minS;
 
+    // メインラップの描画
     for(let i=1; i<p.coords.length; i++) {
-        // 現在の速度が「最低速〜最高速」のどの位置にいるかを0.0〜1.0で算出
+        // 現在の速度がラップ内でどの位置（0.0〜1.0）にいるかを算出
         let ratio = range > 0 ? (p.speeds[i] - minS) / range : 0.5;
-        ratio = Math.max(0, Math.min(1, ratio)); // 範囲外を丸める
+        ratio = Math.max(0, Math.min(1, ratio));
 
-        // --- 鮮やかなヒートマップカラー計算 ---
-        // 低速(minS) = 青(0,0,255) / 中速 = 緑(0,255,0) / 高速(maxS) = 赤(255,0,0)
+        // 鮮やかな3色ヒートマップ（青 -> 緑 -> 赤）
         let r = 0, g_val = 0, b = 0;
         if (ratio < 0.5) {
-            // 青から緑へ
             g_val = Math.floor(255 * (ratio * 2));
             b = Math.floor(255 * (1 - ratio * 2));
         } else {
-            // 緑から赤へ
             r = Math.floor(255 * ((ratio - 0.5) * 2));
             g_val = Math.floor(255 * (1 - (ratio - 0.5) * 2));
         }
@@ -435,26 +439,63 @@ function updateUI() {
         const color = `rgb(${r}, ${g_val}, ${b})`;
 
         L.polyline([
-            [p.coords[i-1][0]+latOffset, p.coords[i-1][1]+lonOffset],
-            [p.coords[i][0]+latOffset, p.coords[i][1]+lonOffset]
+            [p.coords[i-1][0] + latOffset, p.coords[i-1][1] + lonOffset],
+            [p.coords[i][0] + latOffset, p.coords[i][1] + lonOffset]
         ], {
             color: color, 
-            weight: 4, 
+            weight: 5,   // スマホで見やすい太さ
             opacity: 1
         }).addTo(g);
     }
     
-    if(secondaryIdx !== null) L.polyline(lapDataStore[secondaryIdx].coords.map(c=>[c[0]+latOffset, c[1]+lonOffset]), {color:'#fff', weight:1, dashArray:'5,5', opacity:0.5}).addTo(g);
+    // --- 2. 比較用ラップ(Secondary)の表示強化 ---
+    if(secondaryIdx !== null) {
+        const sCoords = lapDataStore[secondaryIdx].coords.map(c => [c[0] + latOffset, c[1] + lonOffset]);
+        
+        // 下地：太い黒の実線（縁取り効果で視認性を確保）
+        L.polyline(sCoords, {
+            color: '#000',
+            weight: 7,
+            opacity: 0.6
+        }).addTo(g);
+
+        // 上書き：白の太い破線
+        L.polyline(sCoords, {
+            color: '#fff',
+            weight: 3,
+            dashArray: '10, 12', // 破線を長く、間隔を広くして見やすく
+            opacity: 1
+        }).addTo(g);
+    }
     
+    // --- 3. スタートライン・セクターラインの描画 ---
     Object.keys(autoLines).forEach(key => {
         const line = autoLines[key];
-        L.polyline([[line.p1.lat+latOffset, line.p1.lon+lonOffset], [line.p2.lat+latOffset, line.p2.lon+lonOffset]], {color:key==='SL'?'#fff':'#ff0', weight:2})
-         .addTo(g).bindTooltip(key, {permanent:true, className:'line-label', direction:'center'});
+        L.polyline([
+            [line.p1.lat + latOffset, line.p1.lon + lonOffset], 
+            [line.p2.lat + latOffset, line.p2.lon + lonOffset]
+        ], {
+            color: key === 'SL' ? '#fff' : '#ff0', 
+            weight: 3
+        }).addTo(g).bindTooltip(key, {
+            permanent: true, 
+            className: 'line-label', 
+            direction: 'center'
+        });
     });
     
+    // 全体を地図に追加
     window.pathLayer = g.addTo(map); 
-    if(!window.isMapInit) { map.fitBounds(g.getBounds()); window.isMapInit=true; }
-    createCharts(); updateFrame();
+    
+    // 初回読み込み時のみ、ライン全体が収まるように表示位置を調整
+    if(!window.isMapInit) { 
+        map.fitBounds(g.getBounds()); 
+        window.isMapInit = true; 
+    }
+    
+    // チャートと数値表示の更新
+    createCharts(); 
+    updateFrame();
 }
 function createCharts() {
     const p = lapDataStore[primaryIdx];
