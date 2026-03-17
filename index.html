@@ -402,24 +402,58 @@ function updateUI() {
     const p = lapDataStore[primaryIdx];
     document.getElementById('seek-bar').max = p.speeds.length - 1;
     if (window.pathLayer) map.removeLayer(window.pathLayer);
+    
     const g = L.featureGroup();
+    
+    // --- 修正箇所：速度の動的レンジ設定 ---
+    // 停車時(5km/h以下)を除いた最低速度と最高速度を取得して、色の幅を最適化する
+    const movingSpeeds = p.speeds.filter(s => s > 5);
     const maxS = Math.max(...p.speeds);
+    const minS = movingSpeeds.length > 0 ? Math.min(...movingSpeeds) : 0;
+    const range = maxS - minS;
+
     for(let i=1; i<p.coords.length; i++) {
-        const ratio = p.speeds[i] / (maxS || 1);
-        const color = `rgb(${Math.floor(255*ratio)}, 100, ${Math.floor(255*(1-ratio))})`;
-        L.polyline([[p.coords[i-1][0]+latOffset, p.coords[i-1][1]+lonOffset],[p.coords[i][0]+latOffset, p.coords[i][1]+lonOffset]], {color, weight:4}).addTo(g);
+        // 現在の速度が「最低速〜最高速」のどの位置にいるかを0.0〜1.0で算出
+        let ratio = range > 0 ? (p.speeds[i] - minS) / range : 0.5;
+        ratio = Math.max(0, Math.min(1, ratio)); // 範囲外を丸める
+
+        // --- 鮮やかなヒートマップカラー計算 ---
+        // 低速(minS) = 青(0,0,255) / 中速 = 緑(0,255,0) / 高速(maxS) = 赤(255,0,0)
+        let r = 0, g_val = 0, b = 0;
+        if (ratio < 0.5) {
+            // 青から緑へ
+            g_val = Math.floor(255 * (ratio * 2));
+            b = Math.floor(255 * (1 - ratio * 2));
+        } else {
+            // 緑から赤へ
+            r = Math.floor(255 * ((ratio - 0.5) * 2));
+            g_val = Math.floor(255 * (1 - (ratio - 0.5) * 2));
+        }
+        
+        const color = `rgb(${r}, ${g_val}, ${b})`;
+
+        L.polyline([
+            [p.coords[i-1][0]+latOffset, p.coords[i-1][1]+lonOffset],
+            [p.coords[i][0]+latOffset, p.coords[i][1]+lonOffset]
+        ], {
+            color: color, 
+            weight: 4, 
+            opacity: 1
+        }).addTo(g);
     }
-    if(secondaryIdx !== null) L.polyline(lapDataStore[secondaryIdx].coords.map(c=>[c[0]+latOffset, c[1]+lonOffset]), {color:'#ff4444', weight:2, dashArray:'5,5', opacity:0.6}).addTo(g);
+    
+    if(secondaryIdx !== null) L.polyline(lapDataStore[secondaryIdx].coords.map(c=>[c[0]+latOffset, c[1]+lonOffset]), {color:'#fff', weight:1, dashArray:'5,5', opacity:0.5}).addTo(g);
+    
     Object.keys(autoLines).forEach(key => {
         const line = autoLines[key];
         L.polyline([[line.p1.lat+latOffset, line.p1.lon+lonOffset], [line.p2.lat+latOffset, line.p2.lon+lonOffset]], {color:key==='SL'?'#fff':'#ff0', weight:2})
          .addTo(g).bindTooltip(key, {permanent:true, className:'line-label', direction:'center'});
     });
+    
     window.pathLayer = g.addTo(map); 
     if(!window.isMapInit) { map.fitBounds(g.getBounds()); window.isMapInit=true; }
     createCharts(); updateFrame();
 }
-
 function createCharts() {
     const p = lapDataStore[primaryIdx];
     const datasets = [{ label:'SPD P', data:p.speeds, borderColor:'#33ccff', pointRadius:0, yAxisID:'y', borderWidth:3 },{ label:'RPM P', data:p.rpms, borderColor:'rgba(0,255,0,0.6)', pointRadius:0, yAxisID:'y1', borderDash:[2,2] }];
