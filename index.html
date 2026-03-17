@@ -413,20 +413,17 @@ function updateUI() {
     
     const g = L.featureGroup();
     
-    // --- 1. 速度レンジの動的最適化（色分けを鮮やかにする） ---
-    // 停車時(5km/h以下)を除いた移動中の最低速度と最高速度を取得
+    // --- 1. 速度レンジの動的最適化（ヒートマップ） ---
     const movingSpeeds = p.speeds.filter(s => s > 5);
     const maxS = Math.max(...p.speeds);
     const minS = movingSpeeds.length > 0 ? Math.min(...movingSpeeds) : 0;
     const range = maxS - minS;
 
-    // メインラップの描画
+    // メインラップの描画 (太さ: 5)
     for(let i=1; i<p.coords.length; i++) {
-        // 現在の速度がラップ内でどの位置（0.0〜1.0）にいるかを算出
         let ratio = range > 0 ? (p.speeds[i] - minS) / range : 0.5;
         ratio = Math.max(0, Math.min(1, ratio));
 
-        // 鮮やかな3色ヒートマップ（青 -> 緑 -> 赤）
         let r = 0, g_val = 0, b = 0;
         if (ratio < 0.5) {
             g_val = Math.floor(255 * (ratio * 2));
@@ -443,27 +440,27 @@ function updateUI() {
             [p.coords[i][0] + latOffset, p.coords[i][1] + lonOffset]
         ], {
             color: color, 
-            weight: 5,   // スマホで見やすい太さ
+            weight: 5,   // メインの太さ
             opacity: 1
         }).addTo(g);
     }
     
-    // --- 2. 比較用ラップ(Secondary)の表示強化 ---
+    // --- 2. 比較用ラップ(Secondary)の表示強化（ヒートマップと同じ太さに調整） ---
     if(secondaryIdx !== null) {
         const sCoords = lapDataStore[secondaryIdx].coords.map(c => [c[0] + latOffset, c[1] + lonOffset]);
         
-        // 下地：太い黒の実線（縁取り効果で視認性を確保）
+        // 下地：黒の実線（ヒートマップと同じ太さ 5 に設定）
         L.polyline(sCoords, {
             color: '#000',
-            weight: 7,
-            opacity: 0.6
+            weight: 5,   // ここをメインと同じに
+            opacity: 0.8
         }).addTo(g);
 
-        // 上書き：白の太い破線
+        // 上書き：白の破線（少し細くして黒の縁を残す）
         L.polyline(sCoords, {
             color: '#fff',
-            weight: 3,
-            dashArray: '10, 12', // 破線を長く、間隔を広くして見やすく
+            weight: 3,   // 破線を細くすることで、縁取りを表現
+            dashArray: '10, 12', 
             opacity: 1
         }).addTo(g);
     }
@@ -484,16 +481,13 @@ function updateUI() {
         });
     });
     
-    // 全体を地図に追加
     window.pathLayer = g.addTo(map); 
     
-    // 初回読み込み時のみ、ライン全体が収まるように表示位置を調整
     if(!window.isMapInit) { 
         map.fitBounds(g.getBounds()); 
         window.isMapInit = true; 
     }
     
-    // チャートと数値表示の更新
     createCharts(); 
     updateFrame();
 }
