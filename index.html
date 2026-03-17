@@ -235,11 +235,11 @@ function checkDirection(p1, p2, line) {
     return (vx * nx) + (vy * ny) > 0;
 }
 // --- 3. GPX解析・ラップ分割ロジック（修正版） ---
+// --- 修正版：方向を自動判別してラップ分割する processGPX ---
 function processGPX(xml) {
     const pts = xml.getElementsByTagName('trkpt');
     let allPoints = [];
     
-    // データ抽出ループ
     for (let i = 0; i < pts.length; i++) {
         const lat = parseFloat(pts[i].getAttribute('lat'));
         const lon = parseFloat(pts[i].getAttribute('lon'));
@@ -258,7 +258,6 @@ function processGPX(xml) {
             }
         }
 
-        // RPM/HR取得
         let rpm = 0;
         const ext = pts[i].getElementsByTagName('extensions')[0];
         if (ext) {
@@ -268,14 +267,16 @@ function processGPX(xml) {
                          ext.getElementsByTagName('gpxtpx:hr')[0];
             rpm = parseInt(rTag?.textContent || 0);
         }
-        
-        // 解析用配列へ追加
         allPoints.push({ lat, lon, time, speed, rpm });
     }
 
     if (allPoints.length === 0) return;
 
-    // ラップ分割処理
+    // --- 方向の自動判定ロジック ---
+    // 最初にラインを通過した時の方向を調べ、それを正解（isReverse）として保持する
+    let isReverse = false;
+    let directionFixed = false;
+
     lapDataStore = [];
     let cur = { coords:[], times:[], rpms:[], speeds:[], rawTimes:[] }, lastSL = 0;
 
@@ -285,7 +286,6 @@ function processGPX(xml) {
         cur.rpms.push(p.rpm);
         cur.rawTimes.push(p.time);
 
-        // 速度計算
         if (cur.coords.length > 1) {
             const p1 = L.latLng(cur.coords[cur.coords.length-2]);
             const p2 = L.latLng(p.lat, p.lon);
@@ -297,20 +297,42 @@ function processGPX(xml) {
             cur.speeds.push(0);
         }
 
-        // --- 修正：checkDirectionを使用して「順方向の交差」のみを判定 ---
-        if (i > 0 && autoLines.SL && checkDirection(allPoints[i-1], p, autoLines.SL)) {
-            if (p.time - lastSL > 5000) { // 5秒の不感時間
-                cur.times = cur.rawTimes.map(t => (t - cur.rawTimes[0]) / 1000);
-                cur.duration = p.time - (lastSL || allPoints[0].time);
-                lapDataStore.push(cur);
-                // 次のラップの初期化
-                cur = { coords:[[p.lat, p.lon]], times:[], rpms:[p.rpm], speeds:[0], rawTimes:[p.time] };
-                lastSL = p.time;
+        if (i > 0 && autoLines.SL) {
+            const p1 = allPoints[i-1];
+            const p2 = p;
+            
+            // 交差しているかチェック
+            if (getIntersect(p1, p2, autoLines.SL)) {
+                // 初回通過時に、どちらの向きが「正解」かを確定させる
+                if (!directionFixed) {
+                    const vx = p2.lon - p1.lon;
+                    const vy = p2.lat - p1.lat;
+                    const lx = autoLines.SL.p2.lon - autoLines.SL.p1.lon;
+                    const ly = autoLines.SL.p2.lat - autoLines.SL.p1.lat;
+                    const dot = (vx * ly) + (vy * -lx);
+                    isReverse = (dot < 0); // 負なら逆向きとして扱う
+                    directionFixed = true;
+                }
+
+                // 確定した向きに基づいて判定
+                const vx = p2.lon - p1.lon;
+                const vy = p2.lat - p1.lat;
+                const lx = autoLines.SL.p2.lon - autoLines.SL.p1.lon;
+                const ly = autoLines.SL.p2.lat - autoLines.SL.p1.lat;
+                const dot = (vx * ly) + (vy * -lx);
+                const isCorrectDirection = isReverse ? (dot < 0) : (dot > 0);
+
+                if (isCorrectDirection && (p.time - lastSL > 5000)) {
+                    cur.times = cur.rawTimes.map(t => (t - cur.rawTimes[0]) / 1000);
+                    cur.duration = p.time - (lastSL || allPoints[0].time);
+                    lapDataStore.push(cur);
+                    cur = { coords:[[p.lat, p.lon]], times:[], rpms:[p.rpm], speeds:[0], rawTimes:[p.time] };
+                    lastSL = p.time;
+                }
             }
         }
     }
 
-    // 残りのデータを最後のラップとして処理
     if (cur.coords.length > 10) {
         cur.times = cur.rawTimes.map(t => (t - cur.rawTimes[0]) / 1000);
         cur.duration = allPoints[allPoints.length-1].time - lastSL;
@@ -318,10 +340,7 @@ function processGPX(xml) {
     }
 
     renderLapList();
-    if (lapDataStore.length > 0) {
-        primaryIdx = 0;
-        updateUI();
-    }
+    if (lapDataStore.length > 0) { primaryIdx = 0; updateUI(); }
 }
 // --- 2. 交差判定ロジック（既存） ---
 function getIntersect(p1, p2, line) {
