@@ -243,9 +243,7 @@ function checkDirection(p1, p2, line) {
 function processGPX(xml) {
     const pts = xml.getElementsByTagName('trkpt');
     let allPoints = [];
-    
-    // 最初の一点の時刻を「基準(0)」として記録する
-    let startTime = 0;
+    let startTime = 0; // 時刻相対化用
 
     for (let i = 0; i < pts.length; i++) {
         const lat = parseFloat(pts[i].getAttribute('lat'));
@@ -253,10 +251,8 @@ function processGPX(xml) {
         const timeStr = pts[i].getElementsByTagName('time')[0]?.textContent;
         const rawTime = timeStr ? new Date(timeStr).getTime() : 0;
         
-        // ログの最初の一点を基準時刻に設定
+        // 最初の1点の時刻を基準(0)にする
         if (i === 0) startTime = rawTime;
-
-        // 【ここが肝】基準時刻からの「経過ミリ秒」に変換（これで1900年代問題は消滅）
         const relativeTime = rawTime - startTime;
 
         let speed = NaN;
@@ -279,8 +275,6 @@ function processGPX(xml) {
                          ext.getElementsByTagName('hr')[0];
             rpm = parseInt(rTag?.textContent || 0);
         }
-        
-        // timeには「大きな数値」ではなく「0からの経過時間」を入れる
         allPoints.push({ lat, lon, time: relativeTime, speed, rpm });
     }
 
@@ -289,7 +283,6 @@ function processGPX(xml) {
     let isReverse = false;
     let directionFixed = false;
     lapDataStore = [];
-    // lastSL(前回通過時刻)も0（開始時）で初期化
     let cur = { coords:[], times:[], rpms:[], speeds:[], rawTimes:[] }, lastSL = 0;
 
     for (let i = 0; i < allPoints.length; i++) {
@@ -298,35 +291,41 @@ function processGPX(xml) {
         cur.rpms.push(p.rpm);
         cur.rawTimes.push(p.time);
 
+        // --- 速度の正規化（ここで確実にkm/hへ変換） ---
         if (cur.coords.length > 1) {
             const p1 = L.latLng(cur.coords[cur.coords.length-2]);
             const p2 = L.latLng(p.lat, p.lon);
             const dist = p1.distanceTo(p2);
             const dt = (p.time - cur.rawTimes[cur.rawTimes.length-2]) / 1000;
-            let s = !isNaN(p.speed) && p.speed !== null ? p.speed : (dt > 0 ? (dist / dt) : 0);
-            if (s > 0 && s < 60) s = s * 3.6; 
-            cur.speeds.push(s);
+            
+            // ログのspeed(m/s)をkm/hに。無い場合はGPS間距離から計算
+            let s_kmh = 0;
+            if (!isNaN(p.speed) && p.speed !== null) {
+                s_kmh = p.speed * 3.6; // 確実に3.6倍する
+            } else {
+                s_kmh = dt > 0 ? (dist / dt) * 3.6 : 0;
+            }
+            cur.speeds.push(s_kmh);
         } else {
             cur.speeds.push(0);
         }
 
         if (i > 0 && autoLines.SL) {
-            if (getIntersect(allPoints[i-1], p, autoLines.SL)) {
+            const p1 = allPoints[i-1];
+            if (getIntersect(p1, p, autoLines.SL)) {
+                const vx = p.lon - p1.lon, vy = p.lat - p1.lat;
+                const lx = autoLines.SL.p2.lon - autoLines.SL.p1.lon, ly = autoLines.SL.p2.lat - autoLines.SL.p1.lat;
+                const dot = (vx * ly) + (vy * -lx);
+
                 if (!directionFixed) {
-                    const dot = ( (p.lon - allPoints[i-1].lon) * (autoLines.SL.p2.lat - autoLines.SL.p1.lat) ) + 
-                                ( (p.lat - allPoints[i-1].lat) * -(autoLines.SL.p2.lon - autoLines.SL.p1.lon) );
                     isReverse = (dot < 0);
                     directionFixed = true;
                 }
 
-                const dot = ( (p.lon - allPoints[i-1].lon) * (autoLines.SL.p2.lat - autoLines.SL.p1.lat) ) + 
-                            ( (p.lat - allPoints[i-1].lat) * -(autoLines.SL.p2.lon - autoLines.SL.p1.lon) );
                 const isCorrectDirection = isReverse ? (dot < 0) : (dot > 0);
-
                 if (isCorrectDirection && (p.time - lastSL > 5000)) {
                     cur.times = cur.rawTimes.map(t => (t - cur.rawTimes[0]) / 1000);
-                    // ここで純粋な「1周の秒数」が出る
-                    cur.duration = (p.time - lastSL) / 1000; 
+                    cur.duration = (p.time - lastSL) / 1000; // msを1000で割って「秒」にする
                     
                     lapDataStore.push(cur);
                     cur = { coords:[[p.lat, p.lon]], times:[], rpms:[p.rpm], speeds:[0], rawTimes:[p.time] };
@@ -335,7 +334,7 @@ function processGPX(xml) {
             }
         }
     }
-    // 最後の半端なラップの処理
+
     if (cur.coords.length > 10) {
         cur.times = cur.rawTimes.map(t => (t - cur.rawTimes[0]) / 1000);
         cur.duration = (allPoints[allPoints.length-1].time - lastSL) / 1000;
