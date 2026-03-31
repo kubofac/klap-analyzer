@@ -243,7 +243,7 @@ function checkDirection(p1, p2, line) {
 function processGPX(xml) {
     const pts = xml.getElementsByTagName('trkpt');
     let allPoints = [];
-    let startTime = 0; // 時刻相対化用
+    let startTime = 0; 
 
     for (let i = 0; i < pts.length; i++) {
         const lat = parseFloat(pts[i].getAttribute('lat'));
@@ -251,24 +251,23 @@ function processGPX(xml) {
         const timeStr = pts[i].getElementsByTagName('time')[0]?.textContent;
         const rawTime = timeStr ? new Date(timeStr).getTime() : 0;
         
-        // 最初の1点の時刻を基準(0)にする
         if (i === 0) startTime = rawTime;
         const relativeTime = rawTime - startTime;
 
         let speed = NaN;
-        const speedTag = pts[i].getElementsByTagName('speed')[0];
-        if (speedTag) {
-            speed = parseFloat(speedTag.textContent);
-        } else {
-            const extensions = pts[i].getElementsByTagName('extensions')[0];
-            if (extensions) {
-                const extSpeed = extensions.getElementsByTagName('speed')[0];
-                if (extSpeed) speed = parseFloat(extSpeed.textContent);
-            }
+        // Log_2004.gpx特有の階層（extensions > speed）を優先的に取得
+        const ext = pts[i].getElementsByTagName('extensions')[0];
+        if (ext) {
+            const extSpeed = ext.getElementsByTagName('speed')[0];
+            if (extSpeed) speed = parseFloat(extSpeed.textContent);
+        }
+        // もしextensionsになければ直下のspeedタグを探す
+        if (isNaN(speed)) {
+            const speedTag = pts[i].getElementsByTagName('speed')[0];
+            if (speedTag) speed = parseFloat(speedTag.textContent);
         }
 
         let rpm = 0;
-        const ext = pts[i].getElementsByTagName('extensions')[0];
         if (ext) {
             const rTag = ext.getElementsByTagName('rpm')[0] || 
                          ext.getElementsByTagName('ns3:rpm')[0] || 
@@ -291,18 +290,21 @@ function processGPX(xml) {
         cur.rpms.push(p.rpm);
         cur.rawTimes.push(p.time);
 
-        // --- 速度の正規化（ここで確実にkm/hへ変換） ---
+        // --- 速度計算とkm/h変換の統一 ---
         if (cur.coords.length > 1) {
             const p1 = L.latLng(cur.coords[cur.coords.length-2]);
             const p2 = L.latLng(p.lat, p.lon);
             const dist = p1.distanceTo(p2);
             const dt = (p.time - cur.rawTimes[cur.rawTimes.length-2]) / 1000;
             
-            // ログのspeed(m/s)をkm/hに。無い場合はGPS間距離から計算
             let s_kmh = 0;
+            // ログのスピードがある場合
             if (!isNaN(p.speed) && p.speed !== null) {
-                s_kmh = p.speed * 3.6; // 確実に3.6倍する
+                // Log_2004のように0〜100程度の数値なら「時速」と判断、
+                // もし0〜20程度なら「秒速」と判断して3.6倍する自動判別
+                s_kmh = p.speed > 30 ? p.speed : p.speed * 3.6;
             } else {
+                // ログに速度がない場合はGPS移動距離から計算(m/s -> km/h)
                 s_kmh = dt > 0 ? (dist / dt) * 3.6 : 0;
             }
             cur.speeds.push(s_kmh);
@@ -316,17 +318,12 @@ function processGPX(xml) {
                 const vx = p.lon - p1.lon, vy = p.lat - p1.lat;
                 const lx = autoLines.SL.p2.lon - autoLines.SL.p1.lon, ly = autoLines.SL.p2.lat - autoLines.SL.p1.lat;
                 const dot = (vx * ly) + (vy * -lx);
-
-                if (!directionFixed) {
-                    isReverse = (dot < 0);
-                    directionFixed = true;
-                }
-
+                if (!directionFixed) { isReverse = (dot < 0); directionFixed = true; }
                 const isCorrectDirection = isReverse ? (dot < 0) : (dot > 0);
+
                 if (isCorrectDirection && (p.time - lastSL > 5000)) {
                     cur.times = cur.rawTimes.map(t => (t - cur.rawTimes[0]) / 1000);
-                    cur.duration = (p.time - lastSL) / 1000; // msを1000で割って「秒」にする
-                    
+                    cur.duration = (p.time - lastSL) / 1000; // ここで正しい秒数に
                     lapDataStore.push(cur);
                     cur = { coords:[[p.lat, p.lon]], times:[], rpms:[p.rpm], speeds:[0], rawTimes:[p.time] };
                     lastSL = p.time;
@@ -334,13 +331,12 @@ function processGPX(xml) {
             }
         }
     }
-
+    // 最終ラップ処理
     if (cur.coords.length > 10) {
         cur.times = cur.rawTimes.map(t => (t - cur.rawTimes[0]) / 1000);
         cur.duration = (allPoints[allPoints.length-1].time - lastSL) / 1000;
         lapDataStore.push(cur);
     }
-
     renderLapList();
     if (lapDataStore.length > 0) { primaryIdx = 0; updateUI(); }
 }
@@ -378,7 +374,7 @@ function renderLapList() {
     const bestS4 = Math.min(...lapsSectors.map(s => s.s4));
     const bestTotal = Math.min(...lapDataStore.map(l => l.duration)); 
     
-    // 全ラップを通じた最高速・最高回転を取得
+    // 全データの中の最高速を正しく抽出
     const globalMaxS = Math.max(...lapDataStore.map(l => Math.max(...l.speeds)));
     const globalMaxR = Math.max(...lapDataStore.map(l => Math.max(...l.rpms)));
 
@@ -388,13 +384,11 @@ function renderLapList() {
         const s = lapsSectors[i]; 
         const maxS = Math.max(...l.speeds); 
         const maxR = Math.max(...l.rpms);
-        
         const div = document.createElement('div');
         div.className = `lap-row ${primaryIdx===i?'sel-p':''} ${secondaryIdx===i?'sel-s':''}`;
         
         const wrapBest = (val, best) => `<span class="${val===best?'val-best':''}">${val===999?'--':val.toFixed(3)}</span>`;
         
-        // durationは既に「秒」なのでそのまま、maxSもkm/hで保存されているのでそのまま表示
         div.innerHTML = `
             <span>L${i}</span>
             ${wrapBest(s.s1, bestS1)}
@@ -405,13 +399,9 @@ function renderLapList() {
             <span class="${maxS >= globalMaxS && maxS > 0 ? 'stat-best' : ''}">${Math.round(maxS)}</span>
             <span class="${maxR >= globalMaxR && maxR > 0 ? 'stat-best' : ''}">${maxR}</span>
         `;
-        
-        div.onclick = () => { 
-            if(primaryIdx===i) primaryIdx=null; 
-            else if(secondaryIdx===i) secondaryIdx=null; 
-            else if(primaryIdx===null) primaryIdx=i; 
-            else secondaryIdx=i; 
-            renderLapList(); 
+        div.onclick = () => { /* 選択ロジック（そのまま） */
+            if(primaryIdx===i) primaryIdx=null; else if(secondaryIdx===i) secondaryIdx=null; 
+            else if(primaryIdx===null) primaryIdx=i; else secondaryIdx=i; renderLapList(); 
         };
         c.appendChild(div);
     });
