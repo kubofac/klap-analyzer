@@ -376,10 +376,9 @@ function renderLapList() {
     const bestS2 = Math.min(...lapsSectors.map(s => s.s2));
     const bestS3 = Math.min(...lapsSectors.map(s => s.s3));
     const bestS4 = Math.min(...lapsSectors.map(s => s.s4));
-    
-    // durationは既に秒なのでそのまま比較
     const bestTotal = Math.min(...lapDataStore.map(l => l.duration)); 
     
+    // 全ラップを通じた最高速・最高回転を取得
     const globalMaxS = Math.max(...lapDataStore.map(l => Math.max(...l.speeds)));
     const globalMaxR = Math.max(...lapDataStore.map(l => Math.max(...l.rpms)));
 
@@ -395,7 +394,7 @@ function renderLapList() {
         
         const wrapBest = (val, best) => `<span class="${val===best?'val-best':''}">${val===999?'--':val.toFixed(3)}</span>`;
         
-        // ★ l.duration.toFixed(3) で表示（1000で割る必要なし）
+        // durationは既に「秒」なのでそのまま、maxSもkm/hで保存されているのでそのまま表示
         div.innerHTML = `
             <span>L${i}</span>
             ${wrapBest(s.s1, bestS1)}
@@ -403,8 +402,8 @@ function renderLapList() {
             ${wrapBest(s.s3, bestS3)}
             ${wrapBest(s.s4, bestS4)}
             <span class="${l.duration===bestTotal?'lap-best':''}">${l.duration.toFixed(3)}s</span>
-            <span class="${maxS===globalMaxS?'stat-best':''}">${Math.round(maxS)}</span>
-            <span class="${maxR===globalMaxR?'stat-best':''}">${maxR}</span>
+            <span class="${maxS >= globalMaxS && maxS > 0 ? 'stat-best' : ''}">${Math.round(maxS)}</span>
+            <span class="${maxR >= globalMaxR && maxR > 0 ? 'stat-best' : ''}">${maxR}</span>
         `;
         
         div.onclick = () => { 
