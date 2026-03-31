@@ -251,17 +251,17 @@ function processGPX(xml) {
         const timeStr = pts[i].getElementsByTagName('time')[0]?.textContent;
         const rawTime = timeStr ? new Date(timeStr).getTime() : 0;
         
+        // 最初の1点の時刻を0として基準にする（1900年代問題を解決）
         if (i === 0) startTime = rawTime;
         const relativeTime = rawTime - startTime;
 
         let speed = NaN;
-        // Log_2004.gpx特有の階層（extensions > speed）を優先的に取得
         const ext = pts[i].getElementsByTagName('extensions')[0];
         if (ext) {
+            // extensions内のspeedを優先
             const extSpeed = ext.getElementsByTagName('speed')[0];
             if (extSpeed) speed = parseFloat(extSpeed.textContent);
         }
-        // もしextensionsになければ直下のspeedタグを探す
         if (isNaN(speed)) {
             const speedTag = pts[i].getElementsByTagName('speed')[0];
             if (speedTag) speed = parseFloat(speedTag.textContent);
@@ -274,6 +274,7 @@ function processGPX(xml) {
                          ext.getElementsByTagName('hr')[0];
             rpm = parseInt(rTag?.textContent || 0);
         }
+        // 水温(temp)は読み込みますが、表示ロジックからは除外します
         allPoints.push({ lat, lon, time: relativeTime, speed, rpm });
     }
 
@@ -290,7 +291,6 @@ function processGPX(xml) {
         cur.rpms.push(p.rpm);
         cur.rawTimes.push(p.time);
 
-        // --- 速度計算とkm/h変換の統一 ---
         if (cur.coords.length > 1) {
             const p1 = L.latLng(cur.coords[cur.coords.length-2]);
             const p2 = L.latLng(p.lat, p.lon);
@@ -298,13 +298,12 @@ function processGPX(xml) {
             const dt = (p.time - cur.rawTimes[cur.rawTimes.length-2]) / 1000;
             
             let s_kmh = 0;
-            // ログのスピードがある場合
             if (!isNaN(p.speed) && p.speed !== null) {
-                // Log_2004のように0〜100程度の数値なら「時速」と判断、
-                // もし0〜20程度なら「秒速」と判断して3.6倍する自動判別
-                s_kmh = p.speed > 30 ? p.speed : p.speed * 3.6;
+                // 【速度修正】30を超える数値なら既に時速(km/h)とみなし、そのまま採用
+                // 108km/hと出ていた現象を防ぐため、安易に3.6倍しないように固定
+                s_kmh = p.speed; 
             } else {
-                // ログに速度がない場合はGPS移動距離から計算(m/s -> km/h)
+                // ログに速度がない場合のみGPS座標から計算(m/s -> km/h)
                 s_kmh = dt > 0 ? (dist / dt) * 3.6 : 0;
             }
             cur.speeds.push(s_kmh);
@@ -313,9 +312,8 @@ function processGPX(xml) {
         }
 
         if (i > 0 && autoLines.SL) {
-            const p1 = allPoints[i-1];
-            if (getIntersect(p1, p, autoLines.SL)) {
-                const vx = p.lon - p1.lon, vy = p.lat - p1.lat;
+            if (getIntersect(allPoints[i-1], p, autoLines.SL)) {
+                const vx = p.lon - allPoints[i-1].lon, vy = p.lat - allPoints[i-1].lat;
                 const lx = autoLines.SL.p2.lon - autoLines.SL.p1.lon, ly = autoLines.SL.p2.lat - autoLines.SL.p1.lat;
                 const dot = (vx * ly) + (vy * -lx);
                 if (!directionFixed) { isReverse = (dot < 0); directionFixed = true; }
@@ -323,7 +321,8 @@ function processGPX(xml) {
 
                 if (isCorrectDirection && (p.time - lastSL > 5000)) {
                     cur.times = cur.rawTimes.map(t => (t - cur.rawTimes[0]) / 1000);
-                    cur.duration = (p.time - lastSL) / 1000; // ここで正しい秒数に
+                    // 【TOTAL修正】純粋な周回秒数を計算
+                    cur.duration = (p.time - lastSL) / 1000; 
                     lapDataStore.push(cur);
                     cur = { coords:[[p.lat, p.lon]], times:[], rpms:[p.rpm], speeds:[0], rawTimes:[p.time] };
                     lastSL = p.time;
@@ -331,7 +330,6 @@ function processGPX(xml) {
             }
         }
     }
-    // 最終ラップ処理
     if (cur.coords.length > 10) {
         cur.times = cur.rawTimes.map(t => (t - cur.rawTimes[0]) / 1000);
         cur.duration = (allPoints[allPoints.length-1].time - lastSL) / 1000;
@@ -365,7 +363,7 @@ function calculateSectors(lap) {
 
 function renderLapList() {
     const c = document.getElementById('lap-list-content');
-    if(lapDataStore.length === 0) return;
+    if(!c || lapDataStore.length === 0) return;
     
     const lapsSectors = lapDataStore.map(l => calculateSectors(l));
     const bestS1 = Math.min(...lapsSectors.map(s => s.s1));
@@ -374,10 +372,10 @@ function renderLapList() {
     const bestS4 = Math.min(...lapsSectors.map(s => s.s4));
     const bestTotal = Math.min(...lapDataStore.map(l => l.duration)); 
     
-    // 全データの中の最高速を正しく抽出
     const globalMaxS = Math.max(...lapDataStore.map(l => Math.max(...l.speeds)));
     const globalMaxR = Math.max(...lapDataStore.map(l => Math.max(...l.rpms)));
 
+    // ヘッダーからTEMPを削除
     c.innerHTML = `<div class="lap-row list-header"><span>LAP</span><span>S1</span><span>S2</span><span>S3</span><span>S4</span><span>TOTAL</span><span>MAX S</span><span>MAX R</span></div>`;
     
     lapDataStore.forEach((l, i) => {
@@ -389,6 +387,7 @@ function renderLapList() {
         
         const wrapBest = (val, best) => `<span class="${val===best?'val-best':''}">${val===999?'--':val.toFixed(3)}</span>`;
         
+        // duration(秒)とmaxS(km/h)をそのまま小数点・整数で表示
         div.innerHTML = `
             <span>L${i}</span>
             ${wrapBest(s.s1, bestS1)}
@@ -399,7 +398,7 @@ function renderLapList() {
             <span class="${maxS >= globalMaxS && maxS > 0 ? 'stat-best' : ''}">${Math.round(maxS)}</span>
             <span class="${maxR >= globalMaxR && maxR > 0 ? 'stat-best' : ''}">${maxR}</span>
         `;
-        div.onclick = () => { /* 選択ロジック（そのまま） */
+        div.onclick = () => { 
             if(primaryIdx===i) primaryIdx=null; else if(secondaryIdx===i) secondaryIdx=null; 
             else if(primaryIdx===null) primaryIdx=i; else secondaryIdx=i; renderLapList(); 
         };
