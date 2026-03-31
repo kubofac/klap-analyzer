@@ -251,10 +251,11 @@ function processGPX(xml) {
         const time = timeStr ? new Date(timeStr).getTime() : 0;
         
         let speed = NaN;
+        // speedタグを直接、またはextensions内から探す
         const speedTag = pts[i].getElementsByTagName('speed')[0];
-        if (speedTag) speed = parseFloat(speedTag.textContent);
-        
-        if (isNaN(speed)) {
+        if (speedTag) {
+            speed = parseFloat(speedTag.textContent);
+        } else {
             const extensions = pts[i].getElementsByTagName('extensions')[0];
             if (extensions) {
                 const extSpeed = extensions.getElementsByTagName('speed')[0];
@@ -276,11 +277,8 @@ function processGPX(xml) {
 
     if (allPoints.length === 0) return;
 
-    // --- 方向の自動判定ロジック ---
-    // 最初にラインを通過した時の方向を調べ、それを正解（isReverse）として保持する
     let isReverse = false;
     let directionFixed = false;
-
     lapDataStore = [];
     let cur = { coords:[], times:[], rpms:[], speeds:[], rawTimes:[] }, lastSL = 0;
 
@@ -290,13 +288,19 @@ function processGPX(xml) {
         cur.rpms.push(p.rpm);
         cur.rawTimes.push(p.time);
 
+        // --- 速度の正規化ロジック ---
         if (cur.coords.length > 1) {
             const p1 = L.latLng(cur.coords[cur.coords.length-2]);
             const p2 = L.latLng(p.lat, p.lon);
             const dist = p1.distanceTo(p2);
             const dt = (p.time - cur.rawTimes[cur.rawTimes.length-2]) / 1000;
-            const calculatedSpeed = dt > 0 ? (dist / dt) * 3.6 : 0;
-            cur.speeds.push(!isNaN(p.speed) && p.speed !== null ? p.speed * 3.6 : calculatedSpeed);
+            
+            // ログに速度がない場合は計算、ある場合はそれを使用
+            let s = !isNaN(p.speed) && p.speed !== null ? p.speed : (dt > 0 ? (dist / dt) : 0);
+            
+            // 重要：60(km/h)未満なら秒速(m/s)と判断して時速に変換（共用化の肝）
+            if (s > 0 && s < 60) s = s * 3.6; 
+            cur.speeds.push(s);
         } else {
             cur.speeds.push(0);
         }
@@ -305,20 +309,17 @@ function processGPX(xml) {
             const p1 = allPoints[i-1];
             const p2 = p;
             
-            // 交差しているかチェック
             if (getIntersect(p1, p2, autoLines.SL)) {
-                // 初回通過時に、どちらの向きが「正解」かを確定させる
                 if (!directionFixed) {
                     const vx = p2.lon - p1.lon;
                     const vy = p2.lat - p1.lat;
                     const lx = autoLines.SL.p2.lon - autoLines.SL.p1.lon;
                     const ly = autoLines.SL.p2.lat - autoLines.SL.p1.lat;
                     const dot = (vx * ly) + (vy * -lx);
-                    isReverse = (dot < 0); // 負なら逆向きとして扱う
+                    isReverse = (dot < 0);
                     directionFixed = true;
                 }
 
-                // 確定した向きに基づいて判定
                 const vx = p2.lon - p1.lon;
                 const vy = p2.lat - p1.lat;
                 const lx = autoLines.SL.p2.lon - autoLines.SL.p1.lon;
@@ -328,7 +329,9 @@ function processGPX(xml) {
 
                 if (isCorrectDirection && (p.time - lastSL > 5000)) {
                     cur.times = cur.rawTimes.map(t => (t - cur.rawTimes[0]) / 1000);
-                    cur.duration = p.time - (lastSL || allPoints[0].time);
+                    // ★ ミリ秒を秒(s)に変換して格納
+                    cur.duration = (p.time - (lastSL || allPoints[0].time)) / 1000; 
+                    
                     lapDataStore.push(cur);
                     cur = { coords:[[p.lat, p.lon]], times:[], rpms:[p.rpm], speeds:[0], rawTimes:[p.time] };
                     lastSL = p.time;
@@ -339,7 +342,7 @@ function processGPX(xml) {
 
     if (cur.coords.length > 10) {
         cur.times = cur.rawTimes.map(t => (t - cur.rawTimes[0]) / 1000);
-        cur.duration = allPoints[allPoints.length-1].time - lastSL;
+        cur.duration = (allPoints[allPoints.length-1].time - lastSL) / 1000;
         lapDataStore.push(cur);
     }
 
@@ -372,27 +375,53 @@ function calculateSectors(lap) {
 function renderLapList() {
     const c = document.getElementById('lap-list-content');
     if(lapDataStore.length === 0) return;
+    
     const lapsSectors = lapDataStore.map(l => calculateSectors(l));
     const bestS1 = Math.min(...lapsSectors.map(s => s.s1));
     const bestS2 = Math.min(...lapsSectors.map(s => s.s2));
     const bestS3 = Math.min(...lapsSectors.map(s => s.s3));
     const bestS4 = Math.min(...lapsSectors.map(s => s.s4));
-    const bestTotal = Math.min(...lapDataStore.map(l => l.duration));
+    
+    // durationは既に秒なのでそのまま比較
+    const bestTotal = Math.min(...lapDataStore.map(l => l.duration)); 
+    
     const globalMaxS = Math.max(...lapDataStore.map(l => Math.max(...l.speeds)));
     const globalMaxR = Math.max(...lapDataStore.map(l => Math.max(...l.rpms)));
 
     c.innerHTML = `<div class="lap-row list-header"><span>LAP</span><span>S1</span><span>S2</span><span>S3</span><span>S4</span><span>TOTAL</span><span>MAX S</span><span>MAX R</span></div>`;
+    
     lapDataStore.forEach((l, i) => {
-        const s = lapsSectors[i]; const maxS = Math.max(...l.speeds); const maxR = Math.max(...l.rpms);
+        const s = lapsSectors[i]; 
+        const maxS = Math.max(...l.speeds); 
+        const maxR = Math.max(...l.rpms);
+        
         const div = document.createElement('div');
         div.className = `lap-row ${primaryIdx===i?'sel-p':''} ${secondaryIdx===i?'sel-s':''}`;
+        
         const wrapBest = (val, best) => `<span class="${val===best?'val-best':''}">${val===999?'--':val.toFixed(3)}</span>`;
-        div.innerHTML = `<span>L${i}</span>${wrapBest(s.s1, bestS1)}${wrapBest(s.s2, bestS2)}${wrapBest(s.s3, bestS3)}${wrapBest(s.s4, bestS4)}<span class="${l.duration===bestTotal?'lap-best':''}">${(l.duration/1000).toFixed(3)}s</span><span class="${maxS===globalMaxS?'stat-best':''}">${Math.round(maxS)}</span><span class="${maxR===globalMaxR?'stat-best':''}">${maxR}</span>`;
-        div.onclick = () => { if(primaryIdx===i) primaryIdx=null; else if(secondaryIdx===i) secondaryIdx=null; else if(primaryIdx===null) primaryIdx=i; else secondaryIdx=i; renderLapList(); };
+        
+        // ★ l.duration.toFixed(3) で表示（1000で割る必要なし）
+        div.innerHTML = `
+            <span>L${i}</span>
+            ${wrapBest(s.s1, bestS1)}
+            ${wrapBest(s.s2, bestS2)}
+            ${wrapBest(s.s3, bestS3)}
+            ${wrapBest(s.s4, bestS4)}
+            <span class="${l.duration===bestTotal?'lap-best':''}">${l.duration.toFixed(3)}s</span>
+            <span class="${maxS===globalMaxS?'stat-best':''}">${Math.round(maxS)}</span>
+            <span class="${maxR===globalMaxR?'stat-best':''}">${maxR}</span>
+        `;
+        
+        div.onclick = () => { 
+            if(primaryIdx===i) primaryIdx=null; 
+            else if(secondaryIdx===i) secondaryIdx=null; 
+            else if(primaryIdx===null) primaryIdx=i; 
+            else secondaryIdx=i; 
+            renderLapList(); 
+        };
         c.appendChild(div);
     });
 }
-
 function closeLapList() { 
     document.getElementById('lap-list-overlay').style.display='none'; 
     const isComp = (secondaryIdx !== null);
