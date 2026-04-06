@@ -255,17 +255,16 @@ function processGPX(xml) {
         if (i === 0) startTime = rawTime;
         const relativeTime = rawTime - startTime;
 
-        let speed = NaN;
-        const ext = pts[i].getElementsByTagName('extensions')[0];
-        if (ext) {
-            // extensions内のspeedを優先
-            const extSpeed = ext.getElementsByTagName('speed')[0];
-            if (extSpeed) speed = parseFloat(extSpeed.textContent);
-        }
-        if (isNaN(speed)) {
-            const speedTag = pts[i].getElementsByTagName('speed')[0];
-            if (speedTag) speed = parseFloat(speedTag.textContent);
-        }
+  let rawSpeed = NaN;
+const ext = pts[i].getElementsByTagName('extensions')[0];
+// extensions内のspeedタグ（RaceChrono等）を確認
+let speedNode = ext ? ext.getElementsByTagName('speed')[0] : null;
+// なければ標準のspeedタグを確認
+if (!speedNode) speedNode = pts[i].getElementsByTagName('speed')[0];
+
+if (speedNode) {
+    rawSpeed = parseFloat(speedNode.textContent);
+}
 
         let rpm = 0;
         if (ext) {
@@ -297,16 +296,17 @@ function processGPX(xml) {
             const dist = p1.distanceTo(p2);
             const dt = (p.time - cur.rawTimes[cur.rawTimes.length-2]) / 1000;
             
-            let s_kmh = 0;
-            if (!isNaN(p.speed) && p.speed !== null) {
-                // 【速度修正】30を超える数値なら既に時速(km/h)とみなし、そのまま採用
-                // 108km/hと出ていた現象を防ぐため、安易に3.6倍しないように固定
-                s_kmh = p.speed; 
-            } else {
-                // ログに速度がない場合のみGPS座標から計算(m/s -> km/h)
-                s_kmh = dt > 0 ? (dist / dt) * 3.6 : 0;
-            }
-            cur.speeds.push(s_kmh);
+         let s_kmh = 0;
+if (!isNaN(rawSpeed)) {
+    // GPXの標準単位(m/s)を(km/h)に変換
+    s_kmh = rawSpeed * 3.6; 
+} else {
+    // ログに速度データがない場合のみ、座標から計算
+    s_kmh = (dt > 0) ? (dist / dt) * 3.6 : 0;
+}
+// 計算した速度を格納
+cur.speeds.push(s_kmh);
+           
         } else {
             cur.speeds.push(0);
         }
