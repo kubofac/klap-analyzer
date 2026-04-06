@@ -251,27 +251,27 @@ function processGPX(xml) {
     let allPoints = [];
     let startTime = 0; 
 
+    // --- ステップ1: 全ポイントのデータを配列に格納 ---
     for (let i = 0; i < pts.length; i++) {
         const lat = parseFloat(pts[i].getAttribute('lat'));
         const lon = parseFloat(pts[i].getAttribute('lon'));
         const timeStr = pts[i].getElementsByTagName('time')[0]?.textContent;
         const rawTime = timeStr ? new Date(timeStr).getTime() : 0;
         
-        // 最初の1点の時刻を0として基準にする（1900年代問題を解決）
         if (i === 0) startTime = rawTime;
         const relativeTime = rawTime - startTime;
 
-  let rawSpeed = NaN;
-const ext = pts[i].getElementsByTagName('extensions')[0];
-// extensions内のspeedタグ（RaceChrono等）を確認
-let speedNode = ext ? ext.getElementsByTagName('speed')[0] : null;
-// なければ標準のspeedタグを確認
-if (!speedNode) speedNode = pts[i].getElementsByTagName('speed')[0];
+        // 速度データの取得（RaceChrono拡張タグ or 標準タグ）
+        let rawSpeedVal = NaN;
+        const ext = pts[i].getElementsByTagName('extensions')[0];
+        let speedNode = ext ? ext.getElementsByTagName('speed')[0] : null;
+        if (!speedNode) speedNode = pts[i].getElementsByTagName('speed')[0];
 
-if (speedNode) {
-    rawSpeed = parseFloat(speedNode.textContent);
-}
+        if (speedNode) {
+            rawSpeedVal = parseFloat(speedNode.textContent);
+        }
 
+        // エンジン回転数（RPM）の取得
         let rpm = 0;
         if (ext) {
             const rTag = ext.getElementsByTagName('rpm')[0] || 
@@ -279,12 +279,14 @@ if (speedNode) {
                          ext.getElementsByTagName('hr')[0];
             rpm = parseInt(rTag?.textContent || 0);
         }
-        // 水温(temp)は読み込みますが、表示ロジックからは除外します
-        allPoints.push({ lat, lon, time: relativeTime, speed, rpm });
+
+        // 後半の処理で使うため、すべて allPoints に入れる
+        allPoints.push({ lat, lon, time: relativeTime, rawSpeed: rawSpeedVal, rpm });
     }
 
     if (allPoints.length === 0) return;
 
+    // --- ステップ2: ラップ分割と速度計算の実行 ---
     let isReverse = false;
     let directionFixed = false;
     lapDataStore = [];
@@ -296,53 +298,62 @@ if (speedNode) {
         cur.rpms.push(p.rpm);
         cur.rawTimes.push(p.time);
 
-        if (cur.coords.length > 1) {
-            const p1 = L.latLng(cur.coords[cur.coords.length-2]);
-            const p2 = L.latLng(p.lat, p.lon);
-            const dist = p1.distanceTo(p2);
-            const dt = (p.time - cur.rawTimes[cur.rawTimes.length-2]) / 1000;
-            
-         let s_kmh = 0;
-if (!isNaN(rawSpeed)) {
-    // GPXの標準単位(m/s)を(km/h)に変換
-    s_kmh = rawSpeed * 3.6; 
-} else {
-    // ログに速度データがない場合のみ、座標から計算
-    s_kmh = (dt > 0) ? (dist / dt) * 3.6 : 0;
-}
-// 計算した速度を格納
-cur.speeds.push(s_kmh);
-           
+        // 速度の確定 (km/h)
+        if (i > 0) {
+            const pPrev = allPoints[i-1];
+            let s_kmh = 0;
+            if (!isNaN(p.rawSpeed)) {
+                s_kmh = p.rawSpeed * 3.6; // m/s -> km/h
+            } else {
+                // 速度データが欠落している場合のみ計算
+                const p1 = L.latLng(pPrev.lat, pPrev.lon);
+                const p2 = L.latLng(p.lat, p.lon);
+                const dist = p1.distanceTo(p2);
+                const dt = (p.time - pPrev.time) / 1000;
+                s_kmh = (dt > 0) ? (dist / dt) * 3.6 : 0;
+            }
+            cur.speeds.push(s_kmh);
         } else {
             cur.speeds.push(0);
         }
 
+        // コースライン交差判定（ラップ分割）
         if (i > 0 && autoLines.SL) {
             if (getIntersect(allPoints[i-1], p, autoLines.SL)) {
                 const vx = p.lon - allPoints[i-1].lon, vy = p.lat - allPoints[i-1].lat;
                 const lx = autoLines.SL.p2.lon - autoLines.SL.p1.lon, ly = autoLines.SL.p2.lat - autoLines.SL.p1.lat;
                 const dot = (vx * ly) + (vy * -lx);
+                
                 if (!directionFixed) { isReverse = (dot < 0); directionFixed = true; }
                 const isCorrectDirection = isReverse ? (dot < 0) : (dot > 0);
 
+                // 5秒以上の間隔がある場合のみ新しいラップとする（誤検知防止）
                 if (isCorrectDirection && (p.time - lastSL > 5000)) {
                     cur.times = cur.rawTimes.map(t => (t - cur.rawTimes[0]) / 1000);
-                    // 【TOTAL修正】純粋な周回秒数を計算
                     cur.duration = (p.time - lastSL) / 1000; 
                     lapDataStore.push(cur);
+                    
+                    // 次のラップの準備
                     cur = { coords:[[p.lat, p.lon]], times:[], rpms:[p.rpm], speeds:[0], rawTimes:[p.time] };
                     lastSL = p.time;
                 }
             }
         }
     }
+
+    // 走行終了後の最後のラップを格納
     if (cur.coords.length > 10) {
         cur.times = cur.rawTimes.map(t => (t - cur.rawTimes[0]) / 1000);
         cur.duration = (allPoints[allPoints.length-1].time - lastSL) / 1000;
         lapDataStore.push(cur);
     }
+
+    // 表示の更新
     renderLapList();
-    if (lapDataStore.length > 0) { primaryIdx = 0; updateUI(); }
+    if (lapDataStore.length > 0) {
+        primaryIdx = 0;
+        updateUI();
+    }
 }
 // --- 2. 交差判定ロジック（既存） ---
 function getIntersect(p1, p2, line) {
