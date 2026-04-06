@@ -131,11 +131,17 @@ let latOffset = 0, lonOffset = 0;
 
 window.onload = () => {
     // attributionControl: false を追加してデフォルトの大きな表示を消す
-    map = L.map('map', { zoomControl: false, maxZoom: 22, attributionControl: false }).setView([35.68, 139.76], 15);
+  // map の初期化部分を修正
+map = L.map('map', { 
+    zoomControl: false, 
+    maxZoom: 24,           // ここを24くらいまで上げると、数cm単位のラインが見えます
+    attributionControl: false 
+}).setView([35.68, 139.76], 15);
     
-    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-        maxZoom: 22
-    }).addTo(map);
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    maxZoom: 24,           // 地図をどこまでズーム操作できるか
+    maxNativeZoom: 18      // 実際の画像データが存在する限界（Esriの場合は18〜19が安全）
+}).addTo(map);
 
     // 隅っこに小さく表示させる（邪魔にならない程度）
     L.control.attribution({ prefix: 'Esri' }).addTo(map);
