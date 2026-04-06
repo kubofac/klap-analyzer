@@ -47,8 +47,30 @@
         .grid-label { text-align: left; color: #888; min-width: 50px; }
         .comp-only { display: none; }
 
-        #map-adjust-ctrls { position: absolute; bottom: 20px; left: 10px; z-index: 1000; display: grid; grid-template-columns: repeat(3, 40px); gap: 5px; }
-        .adj-btn { width: 40px; height: 40px; background: rgba(0,0,0,0.8); color: white; border: 1px solid #fff; border-radius: 5px; cursor: pointer; font-weight: bold; }
+       #map-adjust-ctrls { 
+    position: absolute; 
+    top: 10px; 
+    left: 10px; 
+    z-index: 1000; 
+    display: grid; 
+    /* 3列×2行の非常にタイトなグリッド */
+    grid-template-columns: repeat(3, 35px); 
+    grid-template-rows: repeat(2, 35px);
+    gap: 2px; 
+    padding-top: env(safe-area-inset-top);
+}
+
+/* 補正ボタン自体のサイズも少し小さくして邪魔にならないようにします */
+.adj-btn { 
+    width: 35px; 
+    height: 35px; 
+    background: rgba(0,0,0,0.6); /* 透過を強めて地図を見やすく */
+    color: #fff; 
+    border: 1px solid rgba(255,255,255,0.5); 
+    border-radius: 4px; 
+    font-size: 14px; 
+    cursor: pointer; 
+}
 
         #lap-list-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.98); z-index: 10000; flex-direction: column; padding: 15px; box-sizing: border-box; }
         #lap-list-content { overflow-y: auto; margin-top: 10px; border-top: 1px solid #333; }
@@ -71,12 +93,13 @@
 
 <div id="main-container">
     <div id="map">
-        <div id="map-adjust-ctrls">
-            <div style="grid-column: 2;"><button class="adj-btn" onclick="adjustMap(0.00001, 0)">↑</button></div>
-            <div style="grid-row: 2;"><button class="adj-btn" onclick="adjustMap(0, -0.00001)">←</button></div>
-            <div style="grid-row: 2;"><button class="adj-btn" onclick="adjustMap(-0.00001, 0)">↓</button></div>
-            <div style="grid-row: 2;"><button class="adj-btn" onclick="adjustMap(0, 0.00001)">→</button></div>
-        </div>
+       <div id="map-adjust-ctrls">
+    <button class="adj-btn" style="grid-column: 2; grid-row: 1;" onclick="adjustMap(0.00001, 0)">↑</button>
+    
+    <button class="adj-btn" style="grid-column: 1; grid-row: 2;" onclick="adjustMap(0, -0.00001)">←</button>
+    <button class="adj-btn" style="grid-column: 2; grid-row: 2;" onclick="adjustMap(-0.00001, 0)">↓</button>
+    <button class="adj-btn" style="grid-column: 3; grid-row: 2;" onclick="adjustMap(0, 0.00001)">→</button>
+</div>
     </div>
     <div id="chart-area">
         <div id="data-dashboard">
