@@ -247,8 +247,22 @@ document.getElementById('fileBtn').onclick = () => document.getElementById('file
 document.getElementById('fileInput').onchange = e => {
     const reader = new FileReader();
     reader.onload = evt => {
+        // --- 以前のデータを完全にリセット ---
+        lapDataStore = []; 
+        primaryIdx = 0;
+        secondaryIdx = null;
+        window.isMapInit = false; // これをfalseにしないと新しい場所にズームしません
+        currentFrame = 0;
+        idxA = null;
+        idxB = null;
+        // -------------------------------
+        
         const xml = new DOMParser().parseFromString(evt.target.result, "text/xml");
-        parseMeta(xml); processGPX(xml);
+        parseMeta(xml); 
+        processGPX(xml);
+        
+        // 読み込み完了後、自動的にラップリストを表示して選択を促す
+        document.getElementById('lap-list-overlay').style.display = 'flex';
     };
     reader.readAsText(e.target.files[0]);
 };
@@ -293,10 +307,17 @@ function checkDirection(p1, p2, line) {
 // --- 修正版：方向を自動判別してラップ分割する processGPX ---
 function processGPX(xml) {
     const pts = xml.getElementsByTagName('trkpt');
+    if (pts.length === 0) {
+        alert("GPXデータが見つかりません。");
+        return;
+    }
+
+    // --- ステップ1: データの完全初期化 ---
     let allPoints = [];
     let startTime = 0; 
+    lapDataStore = []; // 前回の解析データをクリア
 
-    // --- ステップ1: 全ポイントのデータを配列に格納 ---
+    // --- ステップ2: 全ポイントを配列に格納 ---
     for (let i = 0; i < pts.length; i++) {
         const lat = parseFloat(pts[i].getAttribute('lat'));
         const lon = parseFloat(pts[i].getAttribute('lon'));
@@ -306,7 +327,7 @@ function processGPX(xml) {
         if (i === 0) startTime = rawTime;
         const relativeTime = rawTime - startTime;
 
-        // 速度データの取得（RaceChrono拡張タグ or 標準タグ）
+        // 速度データの取得（拡張タグ or 標準タグ）
         let rawSpeedVal = NaN;
         const ext = pts[i].getElementsByTagName('extensions')[0];
         let speedNode = ext ? ext.getElementsByTagName('speed')[0] : null;
@@ -325,17 +346,15 @@ function processGPX(xml) {
             rpm = parseInt(rTag?.textContent || 0);
         }
 
-        // 後半の処理で使うため、すべて allPoints に入れる
         allPoints.push({ lat, lon, time: relativeTime, rawSpeed: rawSpeedVal, rpm });
     }
 
-    if (allPoints.length === 0) return;
-
-    // --- ステップ2: ラップ分割と速度計算の実行 ---
+    // --- ステップ3: ラップ分割ロジック ---
     let isReverse = false;
     let directionFixed = false;
-    lapDataStore = [];
-    let cur = { coords:[], times:[], rpms:[], speeds:[], rawTimes:[] }, lastSL = 0;
+    // 最初のラップの初期化
+    let cur = { coords:[], times:[], rpms:[], speeds:[], rawTimes:[] };
+    let lastSL = allPoints[0].time; 
 
     for (let i = 0; i < allPoints.length; i++) {
         const p = allPoints[i];
@@ -350,7 +369,7 @@ function processGPX(xml) {
             if (!isNaN(p.rawSpeed)) {
                 s_kmh = p.rawSpeed * 3.6; // m/s -> km/h
             } else {
-                // 速度データが欠落している場合のみ計算
+                // 速度データ欠落時の計算
                 const p1 = L.latLng(pPrev.lat, pPrev.lon);
                 const p2 = L.latLng(p.lat, p.lon);
                 const dist = p1.distanceTo(p2);
@@ -362,18 +381,26 @@ function processGPX(xml) {
             cur.speeds.push(0);
         }
 
-        // コースライン交差判定（ラップ分割）
+        // コントロールライン（SL）との交差判定
         if (i > 0 && autoLines.SL) {
-            if (getIntersect(allPoints[i-1], p, autoLines.SL)) {
-                const vx = p.lon - allPoints[i-1].lon, vy = p.lat - allPoints[i-1].lat;
+            const pPrev = allPoints[i-1];
+            if (getIntersect(pPrev, p, autoLines.SL)) {
+                // 方向判定（ベクトルの内積）
+                const vx = p.lon - pPrev.lon, vy = p.lat - pPrev.lat;
                 const lx = autoLines.SL.p2.lon - autoLines.SL.p1.lon, ly = autoLines.SL.p2.lat - autoLines.SL.p1.lat;
                 const dot = (vx * ly) + (vy * -lx);
                 
-                if (!directionFixed) { isReverse = (dot < 0); directionFixed = true; }
+                // 最初の通過で走行方向を固定
+                if (!directionFixed) { 
+                    isReverse = (dot < 0); 
+                    directionFixed = true; 
+                }
+                
                 const isCorrectDirection = isReverse ? (dot < 0) : (dot > 0);
 
-                // 5秒以上の間隔がある場合のみ新しいラップとする（誤検知防止）
+                // 5秒以上の間隔がある場合のみ新しいラップとして確定
                 if (isCorrectDirection && (p.time - lastSL > 5000)) {
+                    // 現在のラップを保存
                     cur.times = cur.rawTimes.map(t => (t - cur.rawTimes[0]) / 1000);
                     cur.duration = (p.time - lastSL) / 1000; 
                     lapDataStore.push(cur);
@@ -386,17 +413,17 @@ function processGPX(xml) {
         }
     }
 
-    // 走行終了後の最後のラップを格納
+    // 走行終了後の未確定セグメントを最後のラップとして保存（10点以上ある場合）
     if (cur.coords.length > 10) {
         cur.times = cur.rawTimes.map(t => (t - cur.rawTimes[0]) / 1000);
         cur.duration = (allPoints[allPoints.length-1].time - lastSL) / 1000;
         lapDataStore.push(cur);
     }
 
-    // 表示の更新
+    // --- ステップ4: UIの更新 ---
     renderLapList();
     if (lapDataStore.length > 0) {
-        primaryIdx = 0;
+        primaryIdx = 0; // デフォルトで最初のラップを選択
         updateUI();
     }
 }
@@ -476,24 +503,36 @@ function closeLapList() {
 }
 
 function updateUI() {
-    if (primaryIdx === null) return;
+    // データがない場合は処理を中断
+    if (primaryIdx === null || lapDataStore.length === 0) return;
+    
     const p = lapDataStore[primaryIdx];
     
-    // シークバーの最大値を現在のラップのデータ数に合わせる
-    document.getElementById('seek-bar').max = p.speeds.length - 1;
+    // 1. シークバーの最大値を現在のラップのデータ数に合わせる
+    const seekBar = document.getElementById('seek-bar');
+    if (seekBar) {
+        seekBar.max = p.speeds.length - 1;
+        // 再読み込み時（再生中でない時）はシーク位置を先頭に戻す
+        if (!isPlaying) {
+            currentFrame = 0;
+            seekBar.value = 0;
+        }
+    }
     
-    // 既存の描画レイヤーがあれば削除してリセット
-    if (window.pathLayer) map.removeLayer(window.pathLayer);
+    // 2. 既存の描画レイヤー（ヒートマップ、比較ライン、セクター線）を削除
+    if (window.pathLayer) {
+        map.removeLayer(window.pathLayer);
+    }
     
+    // 新しい描画グループを作成
     const g = L.featureGroup();
     
-    // --- 1. 速度レンジの動的最適化（ヒートマップ） ---
-    const movingSpeeds = p.speeds.filter(s => s > 5);
-    const maxS = Math.max(...p.speeds);
-    const minS = movingSpeeds.length > 0 ? Math.min(...movingSpeeds) : 0;
-    const range = maxS - minS;
+    // 3. メインラップのヒートマップ描画 (速度による色分け)
+const movingSpeeds = p.speeds.filter(s => s > 5);
+const maxS = Math.max(...p.speeds, 1); // 最低でも1にする
+const minS = movingSpeeds.length > 0 ? Math.min(...movingSpeeds) : 0;
+const range = (maxS - minS) || 1; // 0にならないようにする
 
-    // メインラップの描画 (太さ: 5)
     for(let i=1; i<p.coords.length; i++) {
         let ratio = range > 0 ? (p.speeds[i] - minS) / range : 0.5;
         ratio = Math.max(0, Math.min(1, ratio));
@@ -519,27 +558,28 @@ function updateUI() {
         }).addTo(g);
     }
     
-    // --- 2. 比較用ラップ(Secondary)の表示強化（ヒートマップと同じ太さに調整） ---
-    if(secondaryIdx !== null) {
-        const sCoords = lapDataStore[secondaryIdx].coords.map(c => [c[0] + latOffset, c[1] + lonOffset]);
+    // 4. 比較用ラップ(Secondary)の描画
+    if(secondaryIdx !== null && lapDataStore[secondaryIdx]) {
+        const sLap = lapDataStore[secondaryIdx];
+        const sCoords = sLap.coords.map(c => [c[0] + latOffset, c[1] + lonOffset]);
         
-        // 下地：黒の実線（ヒートマップと同じ太さ 5 に設定）
+        // 下地：黒の縁取り
         L.polyline(sCoords, {
             color: '#000',
-            weight: 5,   // ここをメインと同じに
+            weight: 5,
             opacity: 0.8
         }).addTo(g);
 
-        // 上書き：白の破線（少し細くして黒の縁を残す）
+        // 上書き：白の破線
         L.polyline(sCoords, {
             color: '#fff',
-            weight: 3,   // 破線を細くすることで、縁取りを表現
+            weight: 3,
             dashArray: '10, 12', 
             opacity: 1
         }).addTo(g);
     }
     
-    // --- 3. スタートライン・セクターラインの描画 ---
+    // 5. スタートライン・セクターラインの描画
     Object.keys(autoLines).forEach(key => {
         const line = autoLines[key];
         L.polyline([
@@ -555,13 +595,20 @@ function updateUI() {
         });
     });
     
+    // 6. 全レイヤーを地図に追加
     window.pathLayer = g.addTo(map); 
     
+    // 7. 地図の自動ズーム処理
+    // ファイル読み込み直後（window.isMapInitがfalse）の場合のみ実行
     if(!window.isMapInit) { 
-        map.fitBounds(g.getBounds()); 
-        window.isMapInit = true; 
+        const bounds = g.getBounds();
+        if (bounds.isValid()) {
+            map.fitBounds(bounds, { padding: [30, 30] }); 
+            window.isMapInit = true; // ズーム完了フラグを立てる
+        }
     }
     
+    // 8. グラフとデータ表示の更新
     createCharts(); 
     updateFrame();
 }
