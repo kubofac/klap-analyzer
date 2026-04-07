@@ -11,7 +11,8 @@
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1"></script>
     <style>
         :root { --hrc-red: #ff4444; --hrc-blue: #33ccff; --hrc-purple: #e040fb; --hrc-orange: #ff9900; --hrc-yellow: #ffff00; }
-        html, body { overflow: hidden; width: 100%; height: 100%; background: #000; margin: 0; padding: 0; font-family: sans-serif; color: #fff; }
+        html, body { overflow: hidden; width: 100%; height: 100%; background: #000; margin: 0; padding: 0; font-family: sans-serif; color: #fff; position: fixed; 
+    touch-action: none;}
         #main-container { display: flex; height: calc(100vh - 105px); width: 100%; }
         #map { width: 35%; height: 100%; border-right: 1px solid #444; background: #111; position: relative; z-index: 1; }
         #chart-area { width: 65%; height: 100%; background: #000; position: relative; z-index: 1; }
@@ -172,6 +173,26 @@ map = L.map('map', {
     markerP = L.circleMarker([0,0], {color:'#33ccff', fillColor:'#000', radius:7, fillOpacity:1, weight:3}).addTo(map);
     markerS = L.circleMarker([0,0], {color:'#ff4444', fillColor:'#000', radius:7, fillOpacity:1, weight:3}).addTo(map);
     makeDraggable(document.getElementById('data-dashboard'), document.getElementById('dash-handle'));
+// --- ここから追加 ---
+    const seekBar = document.getElementById('seek-bar');
+
+    // タッチ開始時にブラウザの「引っ張って更新」などを阻止
+    seekBar.addEventListener('touchstart', (e) => {
+        // スワイプがシークバー上で行われている間、他の挙動（画面スクロール等）を止める
+        e.stopPropagation(); 
+    }, { passive: false });
+
+    // 指を動かしている最中の処理（反応速度と安定性を向上）
+    seekBar.addEventListener('touchmove', (e) => {
+        e.stopPropagation();
+        e.target.value = e.target.value;
+        // 指の動きに合わせてフレームを即時更新
+        currentFrame = parseInt(e.target.value);
+        updateFrame();
+    }, { passive: false });
+    // --- ここまで ---
+
+    
 };
 // --- Improved Drag Logic (Fixes the Stretching issue) ---
 function makeDraggable(el, handle) {
@@ -196,6 +217,7 @@ function makeDraggable(el, handle) {
         document.ontouchend = dragEnd;
         document.onmousemove = dragMove;
         document.ontouchmove = dragMove;
+        e.preventDefault();
     }
 
     function dragMove(e) {
@@ -594,7 +616,7 @@ function updateFrame() {
 document.getElementById('btnSetA').onclick = () => { idxA = currentFrame; createCharts(); updateFrame(); };
 document.getElementById('btnSetB').onclick = () => { idxB = currentFrame; createCharts(); updateFrame(); };
 document.getElementById('openListBtn').onclick = () => document.getElementById('lap-list-overlay').style.display='flex';
-document.getElementById('seek-bar').oninput = () => { currentFrame = parseInt(document.getElementById('seek-bar').value); updateFrame(); };
+
 document.getElementById('playBtn').onclick = function() { isPlaying = !isPlaying; this.innerText = isPlaying ? "PAUSE" : "PLAY"; if(isPlaying) animate(); };
 function animate() { if(!isPlaying) return; if(currentFrame >= lapDataStore[primaryIdx].speeds.length-1) { isPlaying=false; document.getElementById('playBtn').innerText="PLAY"; return; } currentFrame++; document.getElementById('seek-bar').value = currentFrame; updateFrame(); requestAnimationFrame(animate); }
 </script>
