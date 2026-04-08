@@ -135,6 +135,9 @@
         <button class="mini-btn" id="openListBtn" style="background:var(--hrc-blue)">LAP LIST</button>
         <button class="mini-btn" id="btnSetA" style="background:var(--hrc-yellow); color:#000">SET A</button>
         <button class="mini-btn" id="btnSetB" style="background:var(--hrc-yellow); color:#000">SET B</button>
+        <div class="ctrl-row">
+    <button class="mini-btn" id="btnDyno" style="background:var(--hrc-purple)">DYNO</button>
+    </div>
         <button class="mini-btn" onclick="location.reload()">RESET</button>
     </div>
     <input type="range" id="seek-bar" value="0">
@@ -666,6 +669,132 @@ document.getElementById('openListBtn').onclick = () => document.getElementById('
 
 document.getElementById('playBtn').onclick = function() { isPlaying = !isPlaying; this.innerText = isPlaying ? "PAUSE" : "PLAY"; if(isPlaying) animate(); };
 function animate() { if(!isPlaying) return; if(currentFrame >= lapDataStore[primaryIdx].speeds.length-1) { isPlaying=false; document.getElementById('playBtn').innerText="PLAY"; return; } currentFrame++; document.getElementById('seek-bar').value = currentFrame; updateFrame(); requestAnimationFrame(animate); }
+let dynoChart = null;
+
+document.getElementById('btnDyno').onclick = () => {
+    // 1. 区間選択のチェック
+    if (idxA === null || idxB === null) {
+        alert("SET A と SET B を押して、ストレートの全開区間を選択してください。");
+        return;
+    }
+
+    // 2. 重量の入力（トップ画面に出さず、実行時のみポップアップ）
+    const lastWeight = localStorage.getItem('klap_weight') || "150";
+    const weightInput = prompt("ライダーを含む総重量(kg)を入力してください", lastWeight);
+    
+    if (weightInput === null) return; // キャンセル
+    const weight = parseFloat(weightInput);
+    if (isNaN(weight) || weight <= 0) {
+        alert("有効な数値を入力してください");
+        return;
+    }
+    localStorage.setItem('klap_weight', weight); // 数値を記憶
+
+    const p = lapDataStore[primaryIdx];
+    const start = Math.min(idxA, idxB);
+    const end = Math.max(idxA, idxB);
+    
+    // 3. 速度のスムージング（3点移動平均）
+    // GPSノイズによる加速度の跳ねを抑えます
+    const smoothV = [];
+    for (let i = 0; i < p.speeds.length; i++) {
+        if (i > 0 && i < p.speeds.length - 1) {
+            smoothV.push((p.speeds[i-1] + p.speeds[i] + p.speeds[i+1]) / 3);
+        } else {
+            smoothV.push(p.speeds[i]);
+        }
+    }
+
+    // 4. 馬力計算ロジック
+    const plotData = [];
+    for (let i = start + 1; i <= end; i++) {
+        const v1 = smoothV[i-1] / 3.6; // m/sに変換
+        const v2 = smoothV[i] / 3.6;
+        const dt = (p.rawTimes[i] - p.rawTimes[i-1]) / 1000;
+        const rpm = p.rpms[i];
+
+        if (dt > 0 && rpm > 0) {
+            const a = (v2 - v1) / dt; // 加速度
+            const force = weight * a; // 駆動力 F=ma
+            const ps = (force * v2) / 735.5; // 馬力 PS=(F*v)/735.5
+
+            // 加速中かつ現実的な馬力のみ採用
+            if (ps > 0 && ps < 50) { 
+                plotData.push({ x: rpm, y: ps });
+            }
+        }
+    }
+
+    if (plotData.length < 3) {
+        alert("データポイントが足りません。もう少し長い区間を選択してください。");
+        return;
+    }
+
+    // 5. RPM順にソートしてグラフを綺麗につなぐ
+    plotData.sort((a, b) => a.x - b.x);
+
+    // 6. オーバーレイ表示と描画
+    document.getElementById('dyno-overlay').style.display = 'flex';
+    
+    const ctx = document.getElementById('dynoChart').getContext('2d');
+    if (dynoChart) dynoChart.destroy();
+
+    dynoChart = new Chart(ctx, {
+        type: 'scatter',
+        data: {
+            datasets: [{
+                label: 'Engine Power (PS)',
+                data: plotData,
+                borderColor: '#e040fb',
+                backgroundColor: 'rgba(224, 64, 251, 0.3)',
+                showLine: true, // 点を線で結ぶ
+                tension: 0.4,    // グラフを滑らかに
+                pointRadius: 3,
+                borderWidth: 2
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: { 
+                    type: 'linear', 
+                    title: { display: true, text: 'ENGINE RPM', color: '#888' },
+                    grid: { color: '#222' },
+                    ticks: { color: '#888' }
+                },
+                y: { 
+                    title: { display: true, text: 'HORSEPOWER (PS)', color: '#888' },
+                    min: 0,
+                    grid: { color: '#222' },
+                    ticks: { color: '#888' }
+                }
+            },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: (ctx) => `${ctx.raw.y.toFixed(2)} PS @ ${ctx.raw.x} RPM`
+                    }
+                }
+            }
+        }
+    });
+};
+
+
 </script>
+
+<div id="dyno-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.95); z-index:20000; flex-direction:column; padding:15px; box-sizing:border-box;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+        <h3 style="margin:0; color:var(--hrc-purple); font-size:18px;">DYNO ANALYSIS (PS vs RPM)</h3>
+        <button class="mini-btn" style="width:80px; background:#666;" onclick="document.getElementById('dyno-overlay').style.display='none'">CLOSE</button>
+    </div>
+    <div style="flex-grow:1; background:#000; border:1px solid #333; border-radius:8px; position:relative; overflow:hidden;">
+        <canvas id="dynoChart"></canvas>
+    </div>
+    <p style="font-size:10px; color:#666; margin-top:10px; text-align:center;">※SET A-B間の加速データから算出（3点スムージング適用）</p>
+</div>
+    
 </body>
 </html>
