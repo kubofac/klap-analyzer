@@ -686,38 +686,36 @@ document.getElementById('btnDyno').onclick = () => {
         return;
     }
 
-    // 1. 保存されている値を読み込む（なければ初期値）
+    // 1. 保存されている値を読み込む（デフォルトはNSR50想定）
     const config = JSON.parse(localStorage.getItem('klap_dyno_config') || JSON.stringify({
         weight: 150,
         f_spkt: 14,
         r_spkt: 42,
         tire: 1.38,
-        gear: 4
+        primary: 4.117, // 一次減速比
+        ratio: 1.318    // 使用ギアの変速比 (例:NSR50の4速)
     }));
 
-    // 2. 入力ダイアログ（カンマ区切りで一気に入力させるか、プロンプトを分ける）
+    // 2. 入力ダイアログ
     const inputStr = prompt(
-        "解析パラメーターを入力してください\n[総重量, Fスプロケ, Rスプロケ, タイヤ周長(m), 使用ギア]\n※半角数字をカンマで区切ってください", 
-        `${config.weight}, ${config.f_spkt}, ${config.r_spkt}, ${config.tire}, ${config.gear}`
+        "解析パラメーターを入力してください\n[総重量, Fスプロケ, Rスプロケ, タイヤ周長(m), 一次減速比, ギア変速比]\n※半角数字をカンマで区切ってください", 
+        `${config.weight}, ${config.f_spkt}, ${config.r_spkt}, ${config.tire}, ${config.primary}, ${config.ratio}`
     );
 
     if (!inputStr) return;
-    const [w, fs, rs, t, g] = inputStr.split(',').map(v => parseFloat(v.trim()));
+    const [w, fs, rs, t, pri, rat] = inputStr.split(',').map(v => parseFloat(v.trim()));
 
-    if ([w, fs, rs, t, g].some(isNaN)) {
+    if ([w, fs, rs, t, pri, rat].some(isNaN)) {
         alert("入力値が正しくありません。");
         return;
     }
 
     // 3. 入力値を次回のために保存
-    localStorage.setItem('klap_dyno_config', JSON.stringify({weight:w, f_spkt:fs, r_spkt:rs, tire:t, gear:g}));
+    localStorage.setItem('klap_dyno_config', JSON.stringify({
+        weight: w, f_spkt: fs, r_spkt: rs, tire: t, primary: pri, ratio: rat
+    }));
 
-    // 4. 定数と計算（NSR50純正 一次減速比4.117, ミッション比）
-    const PRIMARY = 4.117;
-    const GEAR_RATIOS = [3.083, 2.125, 1.611, 1.318, 1.130, 1.000];
     const finalRatio = rs / fs;
-    const gearRatio = GEAR_RATIOS[g - 1];
-
     const p = lapDataStore[primaryIdx];
     const start = Math.min(idxA, idxB);
     const end = Math.max(idxA, idxB);
@@ -738,24 +736,24 @@ document.getElementById('btnDyno').onclick = () => {
         const v_ms = v_kmh / 3.6;
         const dt = (p.rawTimes[i] - p.rawTimes[i-1]) / 1000;
         
-        // --- 速度からRPMを逆算 ---
-        // 常に計算値を使う設定にします（RPMセンサーが無くても、あっても計算値優先）
+        // --- 任意のギア比によるRPM逆算 ---
+        // RPM = (分速 / タイヤ周長) * 二次減速 * 一次減速 * ギア変速比
         const wheel_rpm = (v_kmh * 1000 / 60) / t;
-        const rpm = Math.round(wheel_rpm * finalRatio * PRIMARY * gearRatio);
+        const rpm = Math.round(wheel_rpm * finalRatio * pri * rat);
 
         if (dt > 0 && rpm > 0) {
             const a = (v_ms - (smoothV[i-1] / 3.6)) / dt;
             const ps = (w * a * v_ms) / 735.5;
 
-            // NSR50の現実的な範囲（0〜25馬力、3000〜14000rpm）
-            if (ps > 0 && ps < 25 && rpm > 3000 && rpm < 15000) { 
+            // 汎用性を考え、フィルタ範囲を少し広めに設定
+            if (ps > 0 && ps < 100 && rpm > 1000 && rpm < 20000) { 
                 plotData.push({ x: rpm, y: ps });
             }
         }
     }
 
     if (plotData.length < 3) {
-        alert("加速データが不足しています。区間を広げるか、全開区間を選び直してください。");
+        alert("加速データが不足しています。");
         return;
     }
 
