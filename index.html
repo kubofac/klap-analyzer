@@ -439,17 +439,26 @@ function getIntersect(p1, p2, line) {
     return (ua >= 0 && ua <= 1 && ub >= 0 && ub <= 1);
 }
 function calculateSectors(lap) {
-    let s1=null, s2=null, s3=null;
+    let s1 = null, s2 = null, s3 = null;
     for (let j = 1; j < lap.coords.length; j++) {
         const p1 = {lat: lap.coords[j-1][0], lon: lap.coords[j-1][1]}, p2 = {lat: lap.coords[j][0], lon: lap.coords[j][1]};
         if (!s1 && autoLines.S1 && getIntersect(p1, p2, autoLines.S1)) s1 = lap.times[j];
         if (!s2 && autoLines.S2 && getIntersect(p1, p2, autoLines.S2)) s2 = lap.times[j];
         if (!s3 && autoLines.S3 && getIntersect(p1, p2, autoLines.S3)) s3 = lap.times[j];
     }
+    
+    // 全体の走行時間(秒)
+    const totalTime = lap.duration; 
+    
+    // lastT: 最後に通過した計測ポイントの「開始からの経過秒数」
     const lastT = s3 || s2 || s1;
+    
     return { 
-        s1: s1 || 999, s2: (s1&&s2)?(s2-s1) : 999, 
-        s3: (s2&&s3)?(s3-s2) : 999, s4: lastT?((lap.duration/1000)-lastT) : 999 
+        s1: s1 || 999, 
+        s2: (s1 && s2) ? (s2 - s1) : 999, 
+        s3: (s2 && s3) ? (s3 - s2) : 999, 
+        // 修正点：totalTimeは既に秒単位なので、そのままlastTを引く
+        s4: lastT ? (totalTime - lastT) : 999 
     };
 }
 
