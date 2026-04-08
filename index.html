@@ -764,7 +764,50 @@ document.getElementById('btnDyno').onclick = () => {
     renderDynoChart(plotData);
 };
 
+function renderDynoChart(plotData) {
+    const ctx = document.getElementById('dynoChart').getContext('2d');
+    
+    // 既存のグラフがあれば破棄して作り直す（メモリリーク防止）
+    if (window.dynoChartInstance) {
+        window.dynoChartInstance.destroy();
+    }
 
+    window.dynoChartInstance = new Chart(ctx, {
+        type: 'scatter', 
+        data: {
+            datasets: [{
+                label: 'Horsepower (PS)',
+                data: plotData,
+                borderColor: '#e040fb', // hrc-purple
+                backgroundColor: 'rgba(224, 64, 251, 0.3)',
+                showLine: true,   
+                tension: 0.4,    
+                pointRadius: 2
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: { 
+                    type: 'linear', 
+                    title: { display: true, text: 'RPM', color: '#888' },
+                    grid: { color: '#222' },
+                    ticks: { color: '#888' }
+                },
+                y: { 
+                    title: { display: true, text: 'PS', color: '#888' },
+                    min: 0,
+                    grid: { color: '#222' },
+                    ticks: { color: '#888' }
+                }
+            },
+            plugins: {
+                legend: { display: false }
+            }
+        }
+    });
+}
 </script>
 
 <div id="dyno-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.95); z-index:20000; flex-direction:column; padding:15px; box-sizing:border-box;">
