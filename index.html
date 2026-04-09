@@ -686,122 +686,98 @@ document.getElementById('btnDyno').onclick = () => {
         return;
     }
 
-    // 1. 保存されている値を読み込む（デフォルトはNSR50想定）
     const config = JSON.parse(localStorage.getItem('klap_dyno_config') || JSON.stringify({
-        weight: 150,
-        f_spkt: 14,
-        r_spkt: 42,
-        tire: 1.38,
-        primary: 4.117, // 一次減速比
-        ratio: 1.318    // 使用ギアの変速比 (例:NSR50の4速)
+        weight: 150, f_spkt: 14, r_spkt: 42, tire: 1.38, primary: 4.117, ratio: 1.318
     }));
 
-    // 2. 入力ダイアログ
     const inputStr = prompt(
-        "解析パラメーターを入力してください\n[総重量, Fスプロケ, Rスプロケ, タイヤ周長(m), 一次減速比, ギア変速比]\n※半角数字をカンマで区切ってください", 
+        "解析パラメーターを入力してください\n[総重量, Fスプロケ, Rスプロケ, タイヤ周長(m), 一次減速比, ギア変速比]", 
         `${config.weight}, ${config.f_spkt}, ${config.r_spkt}, ${config.tire}, ${config.primary}, ${config.ratio}`
     );
 
     if (!inputStr) return;
     const [w, fs, rs, t, pri, rat] = inputStr.split(',').map(v => parseFloat(v.trim()));
-
-    if ([w, fs, rs, t, pri, rat].some(isNaN)) {
-        alert("入力値が正しくありません。");
-        return;
-    }
-
-    // 3. 入力値を次回のために保存
-    localStorage.setItem('klap_dyno_config', JSON.stringify({
-        weight: w, f_spkt: fs, r_spkt: rs, tire: t, primary: pri, ratio: rat
-    }));
+    if ([w, fs, rs, t, pri, rat].some(isNaN)) return;
+    localStorage.setItem('klap_dyno_config', JSON.stringify({weight:w, f_spkt:fs, r_spkt:rs, tire:t, primary:pri, ratio:rat}));
 
     const finalRatio = rs / fs;
-    const p = lapDataStore[primaryIdx];
     const start = Math.min(idxA, idxB);
     const end = Math.max(idxA, idxB);
-    
-    // 速度スムージング（3点）
-    const smoothV = [];
-    for (let i = 0; i < p.speeds.length; i++) {
-        if (i > 0 && i < p.speeds.length - 1) {
-            smoothV.push((p.speeds[i-1] + p.speeds[i] + p.speeds[i+1]) / 3);
-        } else {
-            smoothV.push(p.speeds[i]);
-        }
-    }
 
-    const plotData = [];
-    for (let i = start + 1; i <= end; i++) {
-        const v_kmh = smoothV[i];
-        const v_ms = v_kmh / 3.6;
-        const dt = (p.rawTimes[i] - p.rawTimes[i-1]) / 1000;
+    // --- 計算関数 (内部用) ---
+    const calculateDynoData = (lapIdx) => {
+        if (lapIdx === null || !lapDataStore[lapIdx]) return [];
+        const lap = lapDataStore[lapIdx];
+        const res = [];
         
-        // --- 任意のギア比によるRPM逆算 ---
-        // RPM = (分速 / タイヤ周長) * 二次減速 * 一次減速 * ギア変速比
-        const wheel_rpm = (v_kmh * 1000 / 60) / t;
-        const rpm = Math.round(wheel_rpm * finalRatio * pri * rat);
+        // 速度スムージング
+        const sV = lap.speeds.map((v, i, a) => 
+            (i > 0 && i < a.length - 1) ? (a[i-1] + v + a[i+1]) / 3 : v
+        );
 
-        if (dt > 0 && rpm > 0) {
-            const a = (v_ms - (smoothV[i-1] / 3.6)) / dt;
-            const ps = (w * a * v_ms) / 735.5;
+        for (let i = start + 1; i <= end; i++) {
+            if (!sV[i] || !sV[i-1]) continue;
+            const v_ms = sV[i] / 3.6;
+            const dt = (lap.rawTimes[i] - lap.rawTimes[i-1]) / 1000;
+            const wheel_rpm = (sV[i] * 1000 / 60) / t;
+            const rpm = Math.round(wheel_rpm * finalRatio * pri * rat);
 
-            // 汎用性を考え、フィルタ範囲を少し広めに設定
-            if (ps > 0 && ps < 100 && rpm > 1000 && rpm < 20000) { 
-                plotData.push({ x: rpm, y: ps });
+            if (dt > 0 && rpm > 0) {
+                const a = (v_ms - (sV[i-1] / 3.6)) / dt;
+                const ps = (w * a * v_ms) / 735.5;
+                if (ps > 0 && ps < 100 && rpm > 1000 && rpm < 20000) { 
+                    res.push({ x: rpm, y: ps });
+                }
             }
         }
-    }
+        return res.sort((a, b) => a.x - b.x);
+    };
 
-    if (plotData.length < 3) {
-        alert("加速データが不足しています。");
-        return;
-    }
+    const dataP = calculateDynoData(primaryIdx);
+    const dataS = calculateDynoData(secondaryIdx);
 
-    plotData.sort((a, b) => a.x - b.x);
     document.getElementById('dyno-overlay').style.display = 'flex';
-    renderDynoChart(plotData);
+    renderDynoChart(dataP, dataS);
 };
 
-function renderDynoChart(plotData) {
+function renderDynoChart(dataP, dataS) {
     const ctx = document.getElementById('dynoChart').getContext('2d');
-    
-    // 既存のグラフがあれば破棄して作り直す（メモリリーク防止）
-    if (window.dynoChartInstance) {
-        window.dynoChartInstance.destroy();
+    if (window.dynoChartInstance) window.dynoChartInstance.destroy();
+
+    const datasets = [{
+        label: 'Primary (Blue)',
+        data: dataP,
+        borderColor: '#33ccff',
+        backgroundColor: 'rgba(51, 204, 255, 0.2)',
+        showLine: true,
+        tension: 0.4,
+        pointRadius: 2
+    }];
+
+    if (dataS.length > 0) {
+        datasets.push({
+            label: 'Secondary (Red)',
+            data: dataS,
+            borderColor: '#ff4444',
+            backgroundColor: 'rgba(255, 68, 68, 0.2)',
+            showLine: true,
+            tension: 0.4,
+            pointRadius: 2
+        });
     }
 
     window.dynoChartInstance = new Chart(ctx, {
-        type: 'scatter', 
-        data: {
-            datasets: [{
-                label: 'Horsepower (PS)',
-                data: plotData,
-                borderColor: '#e040fb', // hrc-purple
-                backgroundColor: 'rgba(224, 64, 251, 0.3)',
-                showLine: true,   
-                tension: 0.4,    
-                pointRadius: 2
-            }]
-        },
+        type: 'scatter',
+        data: { datasets },
         options: {
             responsive: true,
             maintainAspectRatio: false,
             scales: {
-                x: { 
-                    type: 'linear', 
-                    title: { display: true, text: 'RPM', color: '#888' },
-                    grid: { color: '#222' },
-                    ticks: { color: '#888' }
-                },
-                y: { 
-                    title: { display: true, text: 'PS', color: '#888' },
-                    min: 0,
-                    grid: { color: '#222' },
-                    ticks: { color: '#888' }
-                }
+                x: { type: 'linear', title: { display: true, text: 'RPM', color: '#888' }, grid: { color: '#222' } },
+                y: { title: { display: true, text: 'PS', color: '#888' }, min: 0, grid: { color: '#222' } }
             },
             plugins: {
-                legend: { display: false }
+                legend: { display: true, labels: { color: '#fff' } }
             }
         }
     });
