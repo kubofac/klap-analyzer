@@ -10,6 +10,17 @@ const urlsToCache = [
   // 画像やJavaScriptファイルなど、アプリを構成するすべての静的ファイルをここに追加
 
   // その他のCSSやJSファイルなど
+'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',
+'https://cdn.jsdelivr.net/npm/chart.js',
+'https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1',
+'https://unpkg.com/leaflet@1.7.1/dist/leaflet.js',
+'https://unpkg.com/leaflet@1.7.1/dist/leaflet.css',
+'https://cdn.jsdelivr.net/npm/chart.js'
+
+
+
+
+  
 ];
 
 // インストールイベント: キャッシュにファイルを保存
