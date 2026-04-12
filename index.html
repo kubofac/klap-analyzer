@@ -345,6 +345,7 @@ function processGPX(xml) {
         if (ext) {
             const rTag = ext.getElementsByTagName('rpm')[0] || 
                          ext.getElementsByTagName('ns3:rpm')[0] || 
+                ext.getElementsByTagName('cad')[0] ||
                          ext.getElementsByTagName('hr')[0];
             rpm = parseInt(rTag?.textContent || 0);
         }
