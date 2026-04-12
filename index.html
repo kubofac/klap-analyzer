@@ -705,33 +705,48 @@ document.getElementById('btnDyno').onclick = () => {
     const end = Math.max(idxA, idxB);
 
     // --- 計算関数 (内部用) ---
-    const calculateDynoData = (lapIdx) => {
-        if (lapIdx === null || !lapDataStore[lapIdx]) return [];
-        const lap = lapDataStore[lapIdx];
-        const res = [];
+ const calculateDynoData = (lapIdx) => {
+    if (lapIdx === null || !lapDataStore[lapIdx]) return [];
+    const lap = lapDataStore[lapIdx];
+    const res = [];
+    
+    // 速度データのノイズを除去（加速度計算を安定させるため）
+    const sV = lap.speeds.map((v, i, a) => 
+        (i > 0 && i < a.length - 1) ? (a[i-1] + v + a[i+1]) / 3 : v
+    );
+
+    for (let i = start + 1; i <= end; i++) {
+        if (!sV[i] || !sV[i-1]) continue;
+
+        const v_ms = sV[i] / 3.6; // 現在の速度 (m/s)
+        const dt = (lap.rawTimes[i] - lap.rawTimes[i-1]) / 1000; // 時間差 (s)
         
-        // 速度スムージング
-        const sV = lap.speeds.map((v, i, a) => 
-            (i > 0 && i < a.length - 1) ? (a[i-1] + v + a[i+1]) / 3 : v
-        );
-
-        for (let i = start + 1; i <= end; i++) {
-            if (!sV[i] || !sV[i-1]) continue;
-            const v_ms = sV[i] / 3.6;
-            const dt = (lap.rawTimes[i] - lap.rawTimes[i-1]) / 1000;
+        // --- 修正ポイント：実測RPMを優先して取得 ---
+        let rpm = lap.rpms[i]; 
+        
+        // 実測値が0、もしくは取得できていない場合のみ計算値（ギヤ比＋車速）を使用
+        if (!rpm || rpm === 0) {
             const wheel_rpm = (sV[i] * 1000 / 60) / t;
-            const rpm = Math.round(wheel_rpm * finalRatio * pri * rat);
+            rpm = Math.round(wheel_rpm * finalRatio * pri * rat);
+        }
 
-            if (dt > 0 && rpm > 0) {
-                const a = (v_ms - (sV[i-1] / 3.6)) / dt;
-                const ps = (w * a * v_ms) / 735.5;
-                if (ps > 0 && ps < 100 && rpm > 1000 && rpm < 20000) { 
-                    res.push({ x: rpm, y: ps });
-                }
+        if (dt > 0 && rpm > 0) {
+            const a = (v_ms - (sV[i-1] / 3.6)) / dt; // 加速度 (m/s^2)
+            
+            // 馬力計算式: PS = (重量W * 加速度a * 速度v) / 735.5
+            // 空気抵抗(Cd値)などを考慮する場合はここに係数を足しますが、
+            // 比較用であればこの簡易式で十分「パワーの変化」がわかります。
+            const ps = (w * a * v_ms) / 735.5;
+
+            // 異常値（スパイク）を除外して配列に格納
+            if (ps > 0 && ps < 100 && rpm > 1000 && rpm < 20000) { 
+                res.push({ x: rpm, y: ps });
             }
         }
-        return res.sort((a, b) => a.x - b.x);
-    };
+    }
+    // グラフ描画が線でつながるようにRPM順にソート
+    return res.sort((a, b) => a.x - b.x);
+};
 
     const dataP = calculateDynoData(primaryIdx);
     const dataS = calculateDynoData(secondaryIdx);
