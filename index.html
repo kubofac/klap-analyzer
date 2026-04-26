@@ -78,7 +78,7 @@
         .lap-row { display: grid; grid-template-columns: 40px repeat(4, 1fr) 1.2fr 0.8fr 0.8fr; gap: 2px; padding: 12px 2px; border-bottom: 1px solid #222; cursor: pointer; text-align: center; font-size: 11px; color: #fff; }
         .lap-row.sel-p { background: rgba(51, 204, 255, 0.2); outline: 1px solid var(--hrc-blue); }
         .lap-row.sel-s { background: rgba(255, 68, 68, 0.2); outline: 1px solid var(--hrc-red); }
-        
+
         .val-best { color: var(--hrc-purple) !important; font-weight: bold; }
         .lap-best { color: var(--hrc-red) !important; font-weight: bold; }
         .stat-best { background: var(--hrc-orange); color: #000 !important; font-weight: bold; border-radius: 2px; }
@@ -96,7 +96,7 @@
     <div id="map">
        <div id="map-adjust-ctrls">
     <button class="adj-btn" style="grid-column: 2; grid-row: 1;" onclick="adjustMap(0.00001, 0)">↑</button>
-    
+
     <button class="adj-btn" style="grid-column: 1; grid-row: 2;" onclick="adjustMap(0, -0.00001)">←</button>
     <button class="adj-btn" style="grid-column: 2; grid-row: 2;" onclick="adjustMap(-0.00001, 0)">↓</button>
     <button class="adj-btn" style="grid-column: 3; grid-row: 2;" onclick="adjustMap(0, 0.00001)">→</button>
@@ -164,7 +164,7 @@ map = L.map('map', {
     maxZoom: 24,           // ここを24くらいまで上げると、数cm単位のラインが見えます
     attributionControl: false 
 }).setView([35.68, 139.76], 15);
-    
+
   L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
     maxZoom: 24,           // 地図をどこまでズーム操作できるか
     maxNativeZoom: 18      // 実際の画像データが存在する限界（Esriの場合は18〜19が安全）
@@ -172,7 +172,7 @@ map = L.map('map', {
 
     // 隅っこに小さく表示させる（邪魔にならない程度）
     L.control.attribution({ prefix: 'Esri' }).addTo(map);
-    
+
     markerP = L.circleMarker([0,0], {color:'#33ccff', fillColor:'#000', radius:7, fillOpacity:1, weight:3}).addTo(map);
     markerS = L.circleMarker([0,0], {color:'#ff4444', fillColor:'#000', radius:7, fillOpacity:1, weight:3}).addTo(map);
     makeDraggable(document.getElementById('data-dashboard'), document.getElementById('dash-handle'));
@@ -195,7 +195,7 @@ map = L.map('map', {
     }, { passive: false });
     // --- ここまで ---
 
-    
+
 };
 // --- Improved Drag Logic (Fixes the Stretching issue) ---
 function makeDraggable(el, handle) {
@@ -206,7 +206,7 @@ function makeDraggable(el, handle) {
     function dragStart(e) {
         e = e || window.event;
         e.preventDefault();
-        
+
         // 重要：ドラッグ開始時に現在位置を確定し、右端固定を解除する
         const rect = el.getBoundingClientRect();
         el.style.right = 'auto'; 
@@ -215,7 +215,7 @@ function makeDraggable(el, handle) {
 
         pos3 = e.clientX || (e.touches ? e.touches[0].clientX : 0);
         pos4 = e.clientY || (e.touches ? e.touches[0].clientY : 0);
-        
+
         document.onmouseup = dragEnd;
         document.ontouchend = dragEnd;
         document.onmousemove = dragMove;
@@ -226,12 +226,12 @@ function makeDraggable(el, handle) {
     function dragMove(e) {
         let cx = e.clientX || (e.touches ? e.touches[0].clientX : 0);
         let cy = e.clientY || (e.touches ? e.touches[0].clientY : 0);
-        
+
         pos1 = pos3 - cx;
         pos2 = pos4 - cy;
         pos3 = cx;
         pos4 = cy;
-        
+
         el.style.top = (el.offsetTop - pos2) + "px";
         el.style.left = (el.offsetLeft - pos1) + "px";
     }
@@ -259,11 +259,11 @@ document.getElementById('fileInput').onchange = e => {
         idxA = null;
         idxB = null;
         // -------------------------------
-        
+
         const xml = new DOMParser().parseFromString(evt.target.result, "text/xml");
         parseMeta(xml); 
         processGPX(xml);
-        
+
         // 読み込み完了後、自動的にラップリストを表示して選択を促す
         document.getElementById('lap-list-overlay').style.display = 'flex';
     };
@@ -326,33 +326,28 @@ function processGPX(xml) {
         const lon = parseFloat(pts[i].getAttribute('lon'));
         const timeStr = pts[i].getElementsByTagName('time')[0]?.textContent;
         const rawTime = timeStr ? new Date(timeStr).getTime() : 0;
-        
+
         if (i === 0) startTime = rawTime;
         const relativeTime = rawTime - startTime;
 
-        // 速度データの取得
+        // 速度データの取得（拡張タグ or 標準タグ）
         let rawSpeedVal = NaN;
         const ext = pts[i].getElementsByTagName('extensions')[0];
-        let speedNode = ext ? (ext.getElementsByTagName('speed')[0] || ext.getElementsByTagName('v1:speed')[0]) : null;
+        let speedNode = ext ? ext.getElementsByTagName('speed')[0] : null;
         if (!speedNode) speedNode = pts[i].getElementsByTagName('speed')[0];
-        if (speedNode) rawSpeedVal = parseFloat(speedNode.textContent);
 
-        // --- 回転数（RPM）取得の最終安定版 ---
+        if (speedNode) {
+            rawSpeedVal = parseFloat(speedNode.textContent);
+        }
+
+        // エンジン回転数（RPM）の取得
         let rpm = 0;
         if (ext) {
-            // 接頭辞（v1: 等）に関わらず、全てのタグを調べて名前が合致するものを探す
-            const allNodes = ext.querySelectorAll('*');
-            for (let n of allNodes) {
-                // localName（接頭辞なしの名前）または nodeName をチェック
-                const tagName = (n.localName || n.nodeName).toLowerCase();
-                if (tagName.includes('rpm') || tagName.includes('cad') || tagName.includes('hr')) {
-                    let val = parseInt(n.textContent);
-                    if (!isNaN(val) && val > 0) {
-                        rpm = val;
-                        break; // 一つ見つかれば確定
-                    }
-                }
-            }
+            const rTag = ext.getElementsByTagName('rpm')[0] || 
+                         ext.getElementsByTagName('ns3:rpm')[0] || 
+                ext.getElementsByTagName('cad')[0] ||
+                         ext.getElementsByTagName('hr')[0];
+            rpm = parseInt(rTag?.textContent || 0);
         }
 
         allPoints.push({ lat, lon, time: relativeTime, rawSpeed: rawSpeedVal, rpm });
@@ -361,6 +356,7 @@ function processGPX(xml) {
     // --- ステップ3: ラップ分割ロジック ---
     let isReverse = false;
     let directionFixed = false;
+    // 最初のラップの初期化
     let cur = { coords:[], times:[], rpms:[], speeds:[], rawTimes:[] };
     let lastSL = allPoints[0].time; 
 
@@ -375,8 +371,9 @@ function processGPX(xml) {
             const pPrev = allPoints[i-1];
             let s_kmh = 0;
             if (!isNaN(p.rawSpeed)) {
-                s_kmh = p.rawSpeed * 3.6;
+                s_kmh = p.rawSpeed * 3.6; // m/s -> km/h
             } else {
+                // 速度データ欠落時の計算
                 const p1 = L.latLng(pPrev.lat, pPrev.lon);
                 const p2 = L.latLng(p.lat, p.lon);
                 const dist = p1.distanceTo(p2);
@@ -392,23 +389,27 @@ function processGPX(xml) {
         if (i > 0 && autoLines.SL) {
             const pPrev = allPoints[i-1];
             if (getIntersect(pPrev, p, autoLines.SL)) {
+                // 方向判定（ベクトルの内積）
                 const vx = p.lon - pPrev.lon, vy = p.lat - pPrev.lat;
                 const lx = autoLines.SL.p2.lon - autoLines.SL.p1.lon, ly = autoLines.SL.p2.lat - autoLines.SL.p1.lat;
                 const dot = (vx * ly) + (vy * -lx);
-                
+
+                // 最初の通過で走行方向を固定
                 if (!directionFixed) { 
                     isReverse = (dot < 0); 
                     directionFixed = true; 
                 }
-                
+
                 const isCorrectDirection = isReverse ? (dot < 0) : (dot > 0);
 
-                // 5秒以上の間隔でラップを区切る
+                // 5秒以上の間隔がある場合のみ新しいラップとして確定
                 if (isCorrectDirection && (p.time - lastSL > 5000)) {
+                    // 現在のラップを保存
                     cur.times = cur.rawTimes.map(t => (t - cur.rawTimes[0]) / 1000);
                     cur.duration = (p.time - lastSL) / 1000; 
                     lapDataStore.push(cur);
-                    
+
+                    // 次のラップの準備
                     cur = { coords:[[p.lat, p.lon]], times:[], rpms:[p.rpm], speeds:[0], rawTimes:[p.time] };
                     lastSL = p.time;
                 }
@@ -416,7 +417,7 @@ function processGPX(xml) {
         }
     }
 
-    // 最後の未確定区間を保存
+    // 走行終了後の未確定セグメントを最後のラップとして保存（10点以上ある場合）
     if (cur.coords.length > 10) {
         cur.times = cur.rawTimes.map(t => (t - cur.rawTimes[0]) / 1000);
         cur.duration = (allPoints[allPoints.length-1].time - lastSL) / 1000;
@@ -426,7 +427,7 @@ function processGPX(xml) {
     // --- ステップ4: UIの更新 ---
     renderLapList();
     if (lapDataStore.length > 0) {
-        primaryIdx = 0; 
+        primaryIdx = 0; // デフォルトで最初のラップを選択
         updateUI();
     }
 }
@@ -446,13 +447,13 @@ function calculateSectors(lap) {
         if (!s2 && autoLines.S2 && getIntersect(p1, p2, autoLines.S2)) s2 = lap.times[j];
         if (!s3 && autoLines.S3 && getIntersect(p1, p2, autoLines.S3)) s3 = lap.times[j];
     }
-    
+
     // 全体の走行時間(秒)
     const totalTime = lap.duration; 
-    
+
     // lastT: 最後に通過した計測ポイントの「開始からの経過秒数」
     const lastT = s3 || s2 || s1;
-    
+
     return { 
         s1: s1 || 999, 
         s2: (s1 && s2) ? (s2 - s1) : 999, 
@@ -465,29 +466,29 @@ function calculateSectors(lap) {
 function renderLapList() {
     const c = document.getElementById('lap-list-content');
     if(!c || lapDataStore.length === 0) return;
-    
+
     const lapsSectors = lapDataStore.map(l => calculateSectors(l));
     const bestS1 = Math.min(...lapsSectors.map(s => s.s1));
     const bestS2 = Math.min(...lapsSectors.map(s => s.s2));
     const bestS3 = Math.min(...lapsSectors.map(s => s.s3));
     const bestS4 = Math.min(...lapsSectors.map(s => s.s4));
     const bestTotal = Math.min(...lapDataStore.map(l => l.duration)); 
-    
+
     const globalMaxS = Math.max(...lapDataStore.map(l => Math.max(...l.speeds)));
     const globalMaxR = Math.max(...lapDataStore.map(l => Math.max(...l.rpms)));
 
     // ヘッダーからTEMPを削除
     c.innerHTML = `<div class="lap-row list-header"><span>LAP</span><span>S1</span><span>S2</span><span>S3</span><span>S4</span><span>TOTAL</span><span>MAX S</span><span>MAX R</span></div>`;
-    
+
     lapDataStore.forEach((l, i) => {
         const s = lapsSectors[i]; 
         const maxS = Math.max(...l.speeds); 
         const maxR = Math.max(...l.rpms);
         const div = document.createElement('div');
         div.className = `lap-row ${primaryIdx===i?'sel-p':''} ${secondaryIdx===i?'sel-s':''}`;
-        
+
         const wrapBest = (val, best) => `<span class="${val===best?'val-best':''}">${val===999?'--':val.toFixed(3)}</span>`;
-        
+
         // duration(秒)とmaxS(km/h)をそのまま小数点・整数で表示
         div.innerHTML = `
             <span>L${i}</span>
@@ -517,9 +518,9 @@ function closeLapList() {
 function updateUI() {
     // データがない場合は処理を中断
     if (primaryIdx === null || lapDataStore.length === 0) return;
-    
+
     const p = lapDataStore[primaryIdx];
-    
+
     // 1. シークバーの最大値を現在のラップのデータ数に合わせる
     const seekBar = document.getElementById('seek-bar');
     if (seekBar) {
@@ -530,15 +531,15 @@ function updateUI() {
             seekBar.value = 0;
         }
     }
-    
+
     // 2. 既存の描画レイヤー（ヒートマップ、比較ライン、セクター線）を削除
     if (window.pathLayer) {
         map.removeLayer(window.pathLayer);
     }
-    
+
     // 新しい描画グループを作成
     const g = L.featureGroup();
-    
+
     // 3. メインラップのヒートマップ描画 (速度による色分け)
 const movingSpeeds = p.speeds.filter(s => s > 5);
 const maxS = Math.max(...p.speeds, 1); // 最低でも1にする
@@ -557,7 +558,7 @@ const range = (maxS - minS) || 1; // 0にならないようにする
             r = Math.floor(255 * ((ratio - 0.5) * 2));
             g_val = Math.floor(255 * (1 - (ratio - 0.5) * 2));
         }
-        
+
         const color = `rgb(${r}, ${g_val}, ${b})`;
 
         L.polyline([
@@ -569,12 +570,12 @@ const range = (maxS - minS) || 1; // 0にならないようにする
             opacity: 1
         }).addTo(g);
     }
-    
+
     // 4. 比較用ラップ(Secondary)の描画
     if(secondaryIdx !== null && lapDataStore[secondaryIdx]) {
         const sLap = lapDataStore[secondaryIdx];
         const sCoords = sLap.coords.map(c => [c[0] + latOffset, c[1] + lonOffset]);
-        
+
         // 下地：黒の縁取り
         L.polyline(sCoords, {
             color: '#000',
@@ -590,7 +591,7 @@ const range = (maxS - minS) || 1; // 0にならないようにする
             opacity: 1
         }).addTo(g);
     }
-    
+
     // 5. スタートライン・セクターラインの描画
     Object.keys(autoLines).forEach(key => {
         const line = autoLines[key];
@@ -606,10 +607,10 @@ const range = (maxS - minS) || 1; // 0にならないようにする
             direction: 'center'
         });
     });
-    
+
     // 6. 全レイヤーを地図に追加
     window.pathLayer = g.addTo(map); 
-    
+
     // 7. 地図の自動ズーム処理
     // ファイル読み込み直後（window.isMapInitがfalse）の場合のみ実行
     if(!window.isMapInit) { 
@@ -619,7 +620,7 @@ const range = (maxS - minS) || 1; // 0にならないようにする
             window.isMapInit = true; // ズーム完了フラグを立てる
         }
     }
-    
+
     // 8. グラフとデータ表示の更新
     createCharts(); 
     updateFrame();
@@ -709,7 +710,7 @@ document.getElementById('btnDyno').onclick = () => {
     if (lapIdx === null || !lapDataStore[lapIdx]) return [];
     const lap = lapDataStore[lapIdx];
     const res = [];
-    
+
     // 速度データのノイズを除去（加速度計算を安定させるため）
     const sV = lap.speeds.map((v, i, a) => 
         (i > 0 && i < a.length - 1) ? (a[i-1] + v + a[i+1]) / 3 : v
@@ -720,10 +721,10 @@ document.getElementById('btnDyno').onclick = () => {
 
         const v_ms = sV[i] / 3.6; // 現在の速度 (m/s)
         const dt = (lap.rawTimes[i] - lap.rawTimes[i-1]) / 1000; // 時間差 (s)
-        
+
         // --- 修正ポイント：実測RPMを優先して取得 ---
         let rpm = lap.rpms[i]; 
-        
+
         // 実測値が0、もしくは取得できていない場合のみ計算値（ギヤ比＋車速）を使用
         if (!rpm || rpm === 0) {
             const wheel_rpm = (sV[i] * 1000 / 60) / t;
@@ -732,7 +733,7 @@ document.getElementById('btnDyno').onclick = () => {
 
         if (dt > 0 && rpm > 0) {
             const a = (v_ms - (sV[i-1] / 3.6)) / dt; // 加速度 (m/s^2)
-            
+
             // 馬力計算式: PS = (重量W * 加速度a * 速度v) / 735.5
             // 空気抵抗(Cd値)などを考慮する場合はここに係数を足しますが、
             // 比較用であればこの簡易式で十分「パワーの変化」がわかります。
