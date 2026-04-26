@@ -331,41 +331,39 @@ function processGPX(xml) {
         let rawSpeedVal = NaN;
         const ext = pts[i].getElementsByTagName('extensions')[0];
         
-        // 速度取得（複数のタグ名に対応）
-        if (ext) {
-            let speedNode = ext.getElementsByTagName('speed')[0] || 
-                            ext.getElementsByTagName('v1:speed')[0];
-            if (speedNode) rawSpeedVal = parseFloat(speedNode.textContent);
-        }
-        if (isNaN(rawSpeedVal)) {
-            let directSpeed = pts[i].getElementsByTagName('speed')[0];
-            if (directSpeed) rawSpeedVal = parseFloat(directSpeed.textContent);
-        }
-
-        // --- 回転数（RPM）取得の完全版 ---
+        // --- RPMと速度の取得を「名前空間に依存しない方式」に統一 ---
         let currentRpm = 0;
         if (ext) {
-            // 方法1: 階層を問わず全ての要素から名前で探す (最も確実)
-            const allExtNodes = ext.querySelectorAll('*');
-            for (let n of allExtNodes) {
-                const localName = n.localName || n.nodeName.split(':').pop();
-                const tagName = localName.toLowerCase();
+            // extensions内の全子要素を走査
+            const allNodes = ext.querySelectorAll('*');
+            for (let n of allNodes) {
+                // localName（接頭辞を除いた名前）を取得
+                const nodeName = (n.localName || n.nodeName.split(':').pop()).toLowerCase();
                 
-                // rpm, cad, hr のいずれかに一致する場合
-                if (tagName === 'rpm' || tagName === 'cad' || tagName === 'hr') {
-                    let val = parseInt(n.textContent);
-                    if (!isNaN(val)) {
-                        currentRpm = val;
-                        break; // 見つかったらループを抜ける
-                    }
+                // 回転数の取得 (cad または rpm)
+                if (nodeName === 'cad' || nodeName === 'rpm') {
+                    const val = parseInt(n.textContent);
+                    if (!isNaN(val)) currentRpm = val;
+                }
+                
+                // 速度の取得
+                if (nodeName === 'speed') {
+                    const sVal = parseFloat(n.textContent);
+                    if (!isNaN(sVal)) rawSpeedVal = sVal;
                 }
             }
+        }
+
+        // speedタグがextensionsの外にある場合（標準GPX）
+        if (isNaN(rawSpeedVal)) {
+            const directSpeed = pts[i].getElementsByTagName('speed')[0];
+            if (directSpeed) rawSpeedVal = parseFloat(directSpeed.textContent);
         }
 
         allPoints.push({ lat, lon, time: relativeTime, rawSpeed: rawSpeedVal, rpm: currentRpm });
     }
 
-    // --- ラップ分割・データ格納 ---
+    // --- ラップ分割処理 ---
     let isReverse = false;
     let directionFixed = false;
     let cur = { coords:[], times:[], rpms:[], speeds:[], rawTimes:[] };
@@ -374,10 +372,9 @@ function processGPX(xml) {
     for (let i = 0; i < allPoints.length; i++) {
         const p = allPoints[i];
         cur.coords.push([p.lat, p.lon]);
-        cur.rpms.push(p.rpm); // 各ポイントのRPMを配列に追加
+        cur.rpms.push(p.rpm); // ★重要：ここでのpushがグラフデータになります
         cur.rawTimes.push(p.time);
 
-        // 速度計算
         if (i > 0) {
             const pPrev = allPoints[i-1];
             let s_kmh = 0;
@@ -395,7 +392,6 @@ function processGPX(xml) {
             cur.speeds.push(0);
         }
 
-        // コントロールライン通過判定
         if (i > 0 && autoLines.SL) {
             const pPrev = allPoints[i-1];
             if (getIntersect(pPrev, p, autoLines.SL)) {
@@ -411,7 +407,6 @@ function processGPX(xml) {
                     cur.duration = (p.time - lastSL) / 1000; 
                     lapDataStore.push(cur);
                     
-                    // 次のラップを現在の点のデータから開始
                     cur = { 
                         coords:[[p.lat, p.lon]], 
                         times:[], 
@@ -425,7 +420,6 @@ function processGPX(xml) {
         }
     }
 
-    // 最後の端数データ処理
     if (cur.coords.length > 10) {
         cur.times = cur.rawTimes.map(t => (t - cur.rawTimes[0]) / 1000);
         cur.duration = (allPoints[allPoints.length-1].time - lastSL) / 1000;
