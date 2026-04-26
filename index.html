@@ -340,14 +340,22 @@ function processGPX(xml) {
             rawSpeedVal = parseFloat(speedNode.textContent);
         }
 
-        // エンジン回転数（RPM）の取得
+        // --- 修正箇所：エンジン回転数（RPM）の取得ロジック ---
         let rpm = 0;
         if (ext) {
-            const rTag = ext.getElementsByTagName('rpm')[0] || 
-                         ext.getElementsByTagName('ns3:rpm')[0] || 
-                ext.getElementsByTagName('cad')[0] ||
-                         ext.getElementsByTagName('hr')[0];
-            rpm = parseInt(rTag?.textContent || 0);
+            // extensions内の全子要素をチェックし、名前空間を問わず
+            // 'rpm' か 'cad' か 'hr' という名前を持つタグを探す
+            const nodes = ext.querySelectorAll('*');
+            for (let n of nodes) {
+                const name = n.localName; // 接頭辞（v1:など）を除いた純粋な名前
+                if (name === 'rpm' || name === 'cad' || name === 'hr') {
+                    let val = parseInt(n.textContent);
+                    if (!isNaN(val) && val > 0) {
+                        rpm = val;
+                        break; // 最初に見つかった有効な値を採用
+                    }
+                }
+            }
         }
 
         allPoints.push({ lat, lon, time: relativeTime, rawSpeed: rawSpeedVal, rpm });
@@ -356,7 +364,6 @@ function processGPX(xml) {
     // --- ステップ3: ラップ分割ロジック ---
     let isReverse = false;
     let directionFixed = false;
-    // 最初のラップの初期化
     let cur = { coords:[], times:[], rpms:[], speeds:[], rawTimes:[] };
     let lastSL = allPoints[0].time; 
 
@@ -373,7 +380,6 @@ function processGPX(xml) {
             if (!isNaN(p.rawSpeed)) {
                 s_kmh = p.rawSpeed * 3.6; // m/s -> km/h
             } else {
-                // 速度データ欠落時の計算
                 const p1 = L.latLng(pPrev.lat, pPrev.lon);
                 const p2 = L.latLng(p.lat, p.lon);
                 const dist = p1.distanceTo(p2);
@@ -389,12 +395,10 @@ function processGPX(xml) {
         if (i > 0 && autoLines.SL) {
             const pPrev = allPoints[i-1];
             if (getIntersect(pPrev, p, autoLines.SL)) {
-                // 方向判定（ベクトルの内積）
                 const vx = p.lon - pPrev.lon, vy = p.lat - pPrev.lat;
                 const lx = autoLines.SL.p2.lon - autoLines.SL.p1.lon, ly = autoLines.SL.p2.lat - autoLines.SL.p1.lat;
                 const dot = (vx * ly) + (vy * -lx);
                 
-                // 最初の通過で走行方向を固定
                 if (!directionFixed) { 
                     isReverse = (dot < 0); 
                     directionFixed = true; 
@@ -402,14 +406,11 @@ function processGPX(xml) {
                 
                 const isCorrectDirection = isReverse ? (dot < 0) : (dot > 0);
 
-                // 5秒以上の間隔がある場合のみ新しいラップとして確定
                 if (isCorrectDirection && (p.time - lastSL > 5000)) {
-                    // 現在のラップを保存
                     cur.times = cur.rawTimes.map(t => (t - cur.rawTimes[0]) / 1000);
                     cur.duration = (p.time - lastSL) / 1000; 
                     lapDataStore.push(cur);
                     
-                    // 次のラップの準備
                     cur = { coords:[[p.lat, p.lon]], times:[], rpms:[p.rpm], speeds:[0], rawTimes:[p.time] };
                     lastSL = p.time;
                 }
@@ -417,7 +418,6 @@ function processGPX(xml) {
         }
     }
 
-    // 走行終了後の未確定セグメントを最後のラップとして保存（10点以上ある場合）
     if (cur.coords.length > 10) {
         cur.times = cur.rawTimes.map(t => (t - cur.rawTimes[0]) / 1000);
         cur.duration = (allPoints[allPoints.length-1].time - lastSL) / 1000;
@@ -427,7 +427,7 @@ function processGPX(xml) {
     // --- ステップ4: UIの更新 ---
     renderLapList();
     if (lapDataStore.length > 0) {
-        primaryIdx = 0; // デフォルトで最初のラップを選択
+        primaryIdx = 0;
         updateUI();
     }
 }
