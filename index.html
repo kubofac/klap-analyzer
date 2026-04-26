@@ -331,33 +331,41 @@ function processGPX(xml) {
         let rawSpeedVal = NaN;
         const ext = pts[i].getElementsByTagName('extensions')[0];
         
-        // 速度取得の補強
-        let speedNode = ext ? (ext.getElementsByTagName('speed')[0] || ext.getElementsByTagName('v1:speed')[0]) : null;
-        if (!speedNode) speedNode = pts[i].getElementsByTagName('speed')[0];
-        if (speedNode) rawSpeedVal = parseFloat(speedNode.textContent);
-
-        // --- 回転数（RPM）取得の修正 ---
-        let currentRpm = 0; // ループごとにリセット
+        // 速度取得（複数のタグ名に対応）
         if (ext) {
-            const allNodes = ext.querySelectorAll('*');
-            for (let n of allNodes) {
-                const tagName = (n.localName || n.nodeName).toLowerCase();
-                // 'cad' (RaceLog形式) または 'rpm' (Log_1556形式) を探す
-                if (tagName.includes('rpm') || tagName.includes('cad') || tagName.includes('hr')) {
+            let speedNode = ext.getElementsByTagName('speed')[0] || 
+                            ext.getElementsByTagName('v1:speed')[0];
+            if (speedNode) rawSpeedVal = parseFloat(speedNode.textContent);
+        }
+        if (isNaN(rawSpeedVal)) {
+            let directSpeed = pts[i].getElementsByTagName('speed')[0];
+            if (directSpeed) rawSpeedVal = parseFloat(directSpeed.textContent);
+        }
+
+        // --- 回転数（RPM）取得の完全版 ---
+        let currentRpm = 0;
+        if (ext) {
+            // 方法1: 階層を問わず全ての要素から名前で探す (最も確実)
+            const allExtNodes = ext.querySelectorAll('*');
+            for (let n of allExtNodes) {
+                const localName = n.localName || n.nodeName.split(':').pop();
+                const tagName = localName.toLowerCase();
+                
+                // rpm, cad, hr のいずれかに一致する場合
+                if (tagName === 'rpm' || tagName === 'cad' || tagName === 'hr') {
                     let val = parseInt(n.textContent);
                     if (!isNaN(val)) {
                         currentRpm = val;
-                        break; 
+                        break; // 見つかったらループを抜ける
                     }
                 }
             }
         }
 
-        // ここで currentRpm を各ポイントに確実に紐付けます
         allPoints.push({ lat, lon, time: relativeTime, rawSpeed: rawSpeedVal, rpm: currentRpm });
     }
 
-    // --- ラップ分割処理 ---
+    // --- ラップ分割・データ格納 ---
     let isReverse = false;
     let directionFixed = false;
     let cur = { coords:[], times:[], rpms:[], speeds:[], rawTimes:[] };
@@ -366,9 +374,10 @@ function processGPX(xml) {
     for (let i = 0; i < allPoints.length; i++) {
         const p = allPoints[i];
         cur.coords.push([p.lat, p.lon]);
-        cur.rpms.push(p.rpm); // ★ここで現在のポイントのRPMを配列に追加
+        cur.rpms.push(p.rpm); // 各ポイントのRPMを配列に追加
         cur.rawTimes.push(p.time);
 
+        // 速度計算
         if (i > 0) {
             const pPrev = allPoints[i-1];
             let s_kmh = 0;
@@ -386,6 +395,7 @@ function processGPX(xml) {
             cur.speeds.push(0);
         }
 
+        // コントロールライン通過判定
         if (i > 0 && autoLines.SL) {
             const pPrev = allPoints[i-1];
             if (getIntersect(pPrev, p, autoLines.SL)) {
@@ -401,14 +411,21 @@ function processGPX(xml) {
                     cur.duration = (p.time - lastSL) / 1000; 
                     lapDataStore.push(cur);
                     
-                    // 次のラップの初期化時、最初の1点目のRPMをセット
-                    cur = { coords:[[p.lat, p.lon]], times:[], rpms:[p.rpm], speeds:[0], rawTimes:[p.time] };
+                    // 次のラップを現在の点のデータから開始
+                    cur = { 
+                        coords:[[p.lat, p.lon]], 
+                        times:[], 
+                        rpms:[p.rpm], 
+                        speeds:[cur.speeds[cur.speeds.length-1]], 
+                        rawTimes:[p.time] 
+                    };
                     lastSL = p.time;
                 }
             }
         }
     }
 
+    // 最後の端数データ処理
     if (cur.coords.length > 10) {
         cur.times = cur.rawTimes.map(t => (t - cur.rawTimes[0]) / 1000);
         cur.duration = (allPoints[allPoints.length-1].time - lastSL) / 1000;
