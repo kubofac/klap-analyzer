@@ -2,7 +2,7 @@
       "relation": ["delegate_permission/common.handle_all_urls"],
       "target": {
         "namespace": "android_app",
-        "package_name": "app.vercel.klap_analyzer.twa",
-        "sha256_cert_fingerprints": ["E2:91:3A:59:53:72:1C:DC:41:DD:FC:63:28:42:8A:DA:4B:8D:48:2D:25:B5:DC:02:84:8F:57:31:1D:C4:3B:B1"]
+        "package_name": "com.kfactoryclub.analyzer.twa",
+        "sha256_cert_fingerprints": ["23:9D:F8:C3:5F:CB:C6:E6:82:E8:F9:AA:74:AC:3E:AF:C9:2C:52:52:C5:08:BF:CE:A7:E1:C2:53:A4:ED:F2:5A"]
       }
     }]
