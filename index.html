@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>KLAP ANALYZER V12.1.4</title>
+    <title>KLAP ANALYZER V12.1.5</title>
+     /*セクター小数点以下00修正 */
      <link rel="manifest" href="/manifest.json">  
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -335,19 +336,13 @@ function processGPX(xml) {
         if (ext) {
             const allNodes = ext.querySelectorAll('*');
             for (let n of allNodes) {
-                // 名前空間を除いた純粋なタグ名を取得
                 const nodeName = (n.localName || n.nodeName.split(':').pop()).toLowerCase();
                 
-                // 回転数の判定（cad, rpm に加え hr も対象にする）
                 if (nodeName === 'cad' || nodeName === 'rpm' || nodeName === 'hr') {
                     const val = parseInt(n.textContent);
-                    // 0より大きい有効な数値があれば採用
-                    if (!isNaN(val) && val > 0) {
-                        currentRpm = val;
-                    }
+                    if (!isNaN(val) && val > 0) currentRpm = val;
                 }
                 
-                // 速度の取得
                 if (nodeName === 'speed') {
                     const sVal = parseFloat(n.textContent);
                     if (!isNaN(sVal)) rawSpeedVal = sVal;
@@ -355,7 +350,6 @@ function processGPX(xml) {
             }
         }
 
-        // extensions外の標準speedタグもチェック
         if (isNaN(rawSpeedVal)) {
             const directSpeed = pts[i].getElementsByTagName('speed')[0];
             if (directSpeed) rawSpeedVal = parseFloat(directSpeed.textContent);
@@ -367,35 +361,46 @@ function processGPX(xml) {
     // --- ラップ分割処理 ---
     let isReverse = false;
     let directionFixed = false;
-    let cur = { coords:[], times:[], rpms:[], speeds:[], rawTimes:[] };
+    
+    let currentLapStartRawTime = allPoints[0].time; 
     let lastSL = allPoints[0].time; 
 
-    for (let i = 0; i < allPoints.length; i++) {
-        const p = allPoints[i];
-        cur.coords.push([p.lat, p.lon]);
-        cur.rpms.push(p.rpm); 
-        cur.rawTimes.push(p.time);
+    // 初期化時点で、1点目の相対経過時間「0」を明示的にセット（配列の長さズレ防止）
+    let cur = { 
+        coords: [[allPoints[0].lat, allPoints[0].lon]], 
+        times: [0], 
+        rpms: [allPoints[0].rpm], 
+        speeds: [0], 
+        rawTimes: [allPoints[0].time],
+        lapStartRawTime: currentLapStartRawTime
+    };
 
-        if (i > 0) {
-            const pPrev = allPoints[i-1];
-            let s_kmh = 0;
-            if (!isNaN(p.rawSpeed)) {
-                s_kmh = p.rawSpeed * 3.6;
-            } else {
-                const p1 = L.latLng(pPrev.lat, pPrev.lon);
-                const p2 = L.latLng(p.lat, p.lon);
-                const dist = p1.distanceTo(p2);
-                const dt = (p.time - pPrev.time) / 1000;
-                s_kmh = (dt > 0) ? (dist / dt) * 3.6 : 0;
-            }
-            cur.speeds.push(s_kmh);
+    for (let i = 1; i < allPoints.length; i++) {
+        const p = allPoints[i];
+        const pPrev = allPoints[i-1];
+
+        let s_kmh = 0;
+        if (!isNaN(p.rawSpeed)) {
+            s_kmh = p.rawSpeed * 3.6;
         } else {
-            cur.speeds.push(0);
+            const p1 = L.latLng(pPrev.lat, pPrev.lon);
+            const p2 = L.latLng(p.lat, p.lon);
+            const dist = p1.distanceTo(p2);
+            const dt = (p.time - pPrev.time) / 1000;
+            s_kmh = (dt > 0) ? (dist / dt) * 3.6 : 0;
         }
 
-        if (i > 0 && autoLines.SL) {
-            const pPrev = allPoints[i-1];
-            if (getIntersect(pPrev, p, autoLines.SL)) {
+        // データを現在のラップにリアルタイム追加（インデックスの完全同期）
+        cur.coords.push([p.lat, p.lon]);
+        cur.rpms.push(p.rpm); 
+        cur.speeds.push(s_kmh);
+        cur.rawTimes.push(p.time);
+        cur.times.push((p.time - cur.lapStartRawTime) / 1000); // リアルタイムに経過秒数を追加
+
+        if (autoLines.SL) {
+            const t = getIntersectRatio(pPrev, p, autoLines.SL);
+            
+            if (t !== null) {
                 const vx = p.lon - pPrev.lon, vy = p.lat - pPrev.lat;
                 const lx = autoLines.SL.p2.lon - autoLines.SL.p1.lon, ly = autoLines.SL.p2.lat - autoLines.SL.p1.lat;
                 const dot = (vx * ly) + (vy * -lx);
@@ -403,17 +408,26 @@ function processGPX(xml) {
                 if (!directionFixed) { isReverse = (dot < 0); directionFixed = true; }
                 const isCorrectDirection = isReverse ? (dot < 0) : (dot > 0);
 
+                // 線形補間による「正確なライン通過タイムスタンプ」
+                const exactLinkTime = pPrev.time + (p.time - pPrev.time) * t;
+
                 if (isCorrectDirection && (p.time - lastSL > 5000)) {
-                    cur.times = cur.rawTimes.map(t => (t - cur.rawTimes[0]) / 1000);
-                    cur.duration = (p.time - lastSL) / 1000; 
+                    // 1周のトータル時間を補間された「ライン通過の瞬間同士」の差分で確定
+                    cur.duration = (exactLinkTime - cur.lapStartRawTime) / 1000;
+                    
                     lapDataStore.push(cur);
                     
+                    // 次のラップの開始基準時刻を「ラインをジャストで通過した瞬間」に更新
+                    currentLapStartRawTime = exactLinkTime;
+                    
+                    // 新しいラップオブジェクトの初期化
                     cur = { 
-                        coords:[[p.lat, p.lon]], 
-                        times:[], 
-                        rpms:[p.rpm], 
-                        speeds:[cur.speeds[cur.speeds.length-1]], 
-                        rawTimes:[p.time] 
+                        coords: [[p.lat, p.lon]], 
+                        times: [(p.time - currentLapStartRawTime) / 1000], 
+                        rpms: [p.rpm], 
+                        speeds: [s_kmh], 
+                        rawTimes: [p.time],
+                        lapStartRawTime: currentLapStartRawTime
                     };
                     lastSL = p.time;
                 }
@@ -422,8 +436,7 @@ function processGPX(xml) {
     }
 
     if (cur.coords.length > 10) {
-        cur.times = cur.rawTimes.map(t => (t - cur.rawTimes[0]) / 1000);
-        cur.duration = (allPoints[allPoints.length-1].time - lastSL) / 1000;
+        cur.duration = (allPoints[allPoints.length-1].time - cur.lapStartRawTime) / 1000;
         lapDataStore.push(cur);
     }
 
@@ -434,6 +447,7 @@ function processGPX(xml) {
     }
 }
 // --- 2. 交差判定ロジック（既存） ---
+    
 function getIntersect(p1, p2, line) {
     const x1=p1.lon, y1=p1.lat, x2=p2.lon, y2=p2.lat, x3=line.p1.lon, y3=line.p1.lat, x4=line.p2.lon, y4=line.p2.lat;
     const den = (y4-y3)*(x2-x1)-(x4-x3)*(y2-y1);
@@ -441,26 +455,66 @@ function getIntersect(p1, p2, line) {
     const ua = ((x4-x3)*(y1-y3)-(y4-y3)*(x1-x3))/den, ub = ((x2-x1)*(y1-y3)-(y2-y1)*(x1-x3))/den;
     return (ua >= 0 && ua <= 1 && ub >= 0 && ub <= 1);
 }
+    function getIntersectRatio(p1, p2, line) {
+    if (!line) return null;
+    const x1 = p1.lon, y1 = p1.lat, x2 = p2.lon, y2 = p2.lat;
+    const x3 = line.p1.lon, y3 = line.p1.lat, x4 = line.p2.lon, y4 = line.p2.lat;
+    
+    const den = (y4 - y3) * (x2 - x1) - (x4 - x3) * (y2 - y1);
+    if (Math.abs(den) < 1e-12) return null;
+    
+    const ua = ((x4 - x3) * (y1 - y3) - (y4 - y3) * (x1 - x3)) / den;
+    const ub = ((x2 - x1) * (y1 - y3) - (y2 - y1) * (x1 - x3)) / den;
+    
+    // ua(t) が 0〜1 の間なら、この2点間でラインを横切っている
+    // ub が 0〜1 の間なら、設定されたライン幅の中にいる
+    if (ua >= 0 && ua <= 1 && ub >= 0 && ub <= 1) {
+        return ua; // 通過比率 t (0.0 〜 1.0)
+    }
+    return null;
+}
 function calculateSectors(lap) {
     let s1 = null, s2 = null, s3 = null;
+    
     for (let j = 1; j < lap.coords.length; j++) {
-        const p1 = {lat: lap.coords[j-1][0], lon: lap.coords[j-1][1]}, p2 = {lat: lap.coords[j][0], lon: lap.coords[j][1]};
-        if (!s1 && autoLines.S1 && getIntersect(p1, p2, autoLines.S1)) s1 = lap.times[j];
-        if (!s2 && autoLines.S2 && getIntersect(p1, p2, autoLines.S2)) s2 = lap.times[j];
-        if (!s3 && autoLines.S3 && getIntersect(p1, p2, autoLines.S3)) s3 = lap.times[j];
+        const p1 = {lat: lap.coords[j-1][0], lon: lap.coords[j-1][1], time: lap.rawTimes[j-1]};
+        const p2 = {lat: lap.coords[j][0], lon: lap.coords[j][1], time: lap.rawTimes[j]};
+        
+        // --- Sector 1 ---
+        if (!s1 && autoLines.S1) {
+            const t = getIntersectRatio(p1, p2, autoLines.S1);
+            if (t !== null) {
+                const exactTime = p1.time + (p2.time - p1.time) * t;
+                s1 = (exactTime - lap.lapStartRawTime) / 1000;
+            }
+        }
+        
+        // --- Sector 2 ---
+        if (!s2 && autoLines.S2) {
+            const t = getIntersectRatio(p1, p2, autoLines.S2);
+            if (t !== null) {
+                const exactTime = p1.time + (p2.time - p1.time) * t;
+                s2 = (exactTime - lap.lapStartRawTime) / 1000;
+            }
+        }
+        
+        // --- Sector 3 ---
+        if (!s3 && autoLines.S3) {
+            const t = getIntersectRatio(p1, p2, autoLines.S3);
+            if (t !== null) {
+                const exactTime = p1.time + (p2.time - p1.time) * t;
+                s3 = (exactTime - lap.lapStartRawTime) / 1000;
+            }
+        }
     }
 
-    // 全体の走行時間(秒)
     const totalTime = lap.duration; 
-
-    // lastT: 最後に通過した計測ポイントの「開始からの経過秒数」
     const lastT = s3 || s2 || s1;
 
     return { 
         s1: s1 || 999, 
         s2: (s1 && s2) ? (s2 - s1) : 999, 
         s3: (s2 && s3) ? (s3 - s2) : 999, 
-        // 修正点：totalTimeは既に秒単位なので、そのままlastTを引く
         s4: lastT ? (totalTime - lastT) : 999 
     };
 }
