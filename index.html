@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>KLAP ANALYZER V12.1.5</title>
+    <title>KLAP ANALYZER V12.1.6</title>
 
      <link rel="manifest" href="/manifest.json">  
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -88,7 +88,13 @@
         #controls { position: fixed; bottom: 0; left: 0; width: 100%; height: 105px; background: #111; z-index: 999; padding: 5px; box-sizing: border-box; }
         .ctrl-row { display: flex; align-items: center; gap: 5px; height: 45px; overflow-x: auto; }
         .mini-btn { background: #444; color: white; border: none; padding: 0 12px; border-radius: 4px; font-size: 11px; height: 35px; cursor: pointer; font-weight: bold; flex-shrink: 0; }
-        #seek-bar { width: 100%; height: 40px; accent-color: var(--hrc-red); }
+      #seek-bar { 
+    width: 100%; 
+    height: 44px; 
+    accent-color: var(--hrc-red); 
+    cursor: pointer;
+    touch-action: pan-x; /* スマホに「横スワイプ専用」と教えることで反応速度が上がります */
+}
     </style>
 </head>
 <body>
@@ -180,20 +186,22 @@ map = L.map('map', {
 // --- ここから追加 ---
     const seekBar = document.getElementById('seek-bar');
 
-    // タッチ開始時にブラウザの「引っ張って更新」などを阻止
-    seekBar.addEventListener('touchstart', (e) => {
-        // スワイプがシークバー上で行われている間、他の挙動（画面スクロール等）を止める
-        e.stopPropagation(); 
-    }, { passive: false });
+// PC・スマホ共通：ドラッグ・スワイプした瞬間に超高速でフレームを更新
+const handleLinearSeek = (e) => {
+    if (isPlaying) {
+        isPlaying = false;
+        document.getElementById('playBtn').innerText = "PLAY";
+    }
+    currentFrame = parseInt(e.target.value);
+    updateFrame();
+};
 
-    // 指を動かしている最中の処理（反応速度と安定性を向上）
-    seekBar.addEventListener('touchmove', (e) => {
-        e.stopPropagation();
-        e.target.value = e.target.value;
-        // 指の動きに合わせてフレームを即時更新
-        currentFrame = parseInt(e.target.value);
-        updateFrame();
-    }, { passive: false });
+// inputイベントがPCのマウスドラッグとスマホのスワイプ両方を検知します
+seekBar.addEventListener('input', handleLinearSeek);
+
+// スマホ操作時の誤作動（画面全体のスクロールなど）を防ぐガード
+seekBar.addEventListener('touchstart', (e) => { e.stopPropagation(); }, { passive: true });
+seekBar.addEventListener('touchmove', (e) => { e.stopPropagation(); }, { passive: true });
     // --- ここまで ---
 
 
@@ -726,7 +734,11 @@ function updateFrame() {
         document.getElementById('delta-val').innerText = (p.times[idx] - ref.times[rIdx]).toFixed(3) + "s";
         if (idxA !== null && idxB !== null) document.getElementById('s-ab').innerText = Math.abs(ref.times[idxB] - ref.times[idxA]).toFixed(3) + "s";
     }
-    if(mainChart){ mainChart.options.plugins.annotation.annotations.now.xMin=idx; mainChart.options.plugins.annotation.annotations.now.xMax=idx; mainChart.update('none'); }
+  if(mainChart){ 
+    mainChart.options.plugins.annotation.annotations.now.xMin = idx; 
+    mainChart.options.plugins.annotation.annotations.now.xMax = idx; 
+    mainChart.update('resize'); 
+}
 }
 
 document.getElementById('btnSetA').onclick = () => { idxA = currentFrame; createCharts(); updateFrame(); };
